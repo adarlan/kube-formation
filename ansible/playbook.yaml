@@ -1,0 +1,28 @@
+- name: Initialize control-plane
+  hosts: controlplane
+  vars:
+    ansible_user: ubuntu
+  gather_facts: false
+  tasks:
+    - name: kubeadm init
+      command: sudo kubeadm init
+    # - name: Get the hostname
+    #   command: hostname
+    #   register: hostname_output
+
+    # - name: Display the hostname output for debugging
+    #   debug:
+    #     var: hostname_output.stdout
+
+    # - name: Set fact for hostnames
+    #   set_fact:
+    #     hostnames: "{{ hostname_output.stdout_lines }}"
+
+# - name: Join worker nodes
+#   hosts: workers
+#   gather_facts: false
+#   tasks:
+#     - name: Configure Group 2 using hostnames from Group 1
+#       command: echo "Configured with {{ item }}"
+#       with_items: "{{ hostvars['instance1'].hostnames }}"
+#       delegate_to: localhost
