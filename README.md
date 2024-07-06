@@ -1,55 +1,87 @@
 # Kube Formation
 
-This project is designed to help you practice and understand the Kubernetes architecture by setting up a cluster using kubeadm on Amazon EC2 instances. The project leverages the following tools:
+A project designed to practice and understand the [Kubernetes](https://kubernetes.io/) architecture by setting up a cluster using [Kubeadm](https://kubernetes.io/docs/reference/setup-tools/kubeadm/). This project leverages [Amazon EC2](https://aws.amazon.com/ec2/) for Infrastructure-as-a-Service, [Packer](https://packer.io/) to create images for the cluster nodes, [Terraform](https://terraform.io/) to provision the cluster infrastructure, [Ansible](https://ansible.com/) to initialize and join the cluster nodes, and other tools.
 
-- Packer: For creating immutable AMIs for the cluster nodes.
-- Terraform: For provisioning the EC2 instances and other resources as infrastructure-as-code.
-- Ansible: For initializing and configuring the Kubernetes cluster.
-- AWS CLI: ...
-- AWS Nuke: ...
-- SSH Client: ...
+## Getting Started
 
-## Secrets
+Follow the steps below to set up a Kubernetes cluster on Amazon EC2.
+
+Once you've finished exploring with your cluster, clean up resources by deprovisioning the cluster infrastructure.
+
+### Clone the kube-formation repository
 
 ```shell
-aws_profile=default
-aws_region=us-east-1
+git clone https://github.com/adarlan/kube-formation.git
+```
+
+### Navigate to the kube-formation directory
+
+```shell
+cd kube-formation
+```
+
+### Configure secrets
+
+Create the `secrets` directory and add some files there:
+
+```shell
 mkdir -p secrets
 
-# aws_account_id
-aws --profile=$aws_profile sts get-caller-identity --query "Account" --output text > secrets/aws_account_id
+echo && read -p "AWS account ID: " aws_account_id
+read -p "AWS access key ID: " aws_access_key_id
+read -sp "AWS secret access key: " aws_secret_access_key && echo
+read -p "AWS region: " aws_region
 
-# aws_access_key_id
-aws --profile=$aws_profile configure get aws_access_key_id > secrets/aws_access_key_id
-
-# aws_secret_access_key
-aws --profile=$aws_profile configure get aws_secret_access_key > secrets/aws_secret_access_key
-
-# aws_region
+echo $aws_account_id > secrets/aws_account_id
+echo $aws_access_key_id > secrets/aws_access_key_id
+echo $aws_secret_access_key > secrets/aws_secret_access_key
 echo $aws_region > secrets/aws_region
 ```
 
-## Setup
+If you have the AWS CLI installed and configured, you can create these files by executing the following commands:
 
 ```shell
-# Packer: Build Kubernetes Node AMI
+mkdir -p secrets
+
+echo && read -p "AWS CLI profile: " aws_profile
+read -p "AWS region: " aws_region
+
+aws --profile=$aws_profile sts get-caller-identity --query "Account" --output text > secrets/aws_account_id
+aws --profile=$aws_profile configure get aws_access_key_id > secrets/aws_access_key_id
+aws --profile=$aws_profile configure get aws_secret_access_key > secrets/aws_secret_access_key
+echo $aws_region > secrets/aws_region
+```
+
+### Build Kubernetes Node AMI
+
+```shell
 ./packer/docker-run.sh ./build-kubernetes-node-ami.sh
+```
 
-# SSH Client: Generate SSH Key Pair
-# The public key will be used by Terraform to add to the instances
-# The private key will be used by Ansible to initialize the cluster
+### Generate SSH Key Pair
+
+The public key will be used by Terraform to add to the instances.
+The private key will be used by Ansible to initialize the cluster.
+
+```shell
 ./ssh-client/docker-run.sh ./generate-ssh-key-pair.sh
+```
 
-# Terraform: Apply Kubernetes Infrastructure
+### Apply Kubernetes Infrastructure
+
+```shell
 ./terraform/docker-run.sh ./apply-kubernetes-infrastructure.sh
+```
 
-# TODO wait instances initialize?
+<!-- TODO wait instances initialize? -->
 
-# Ansible: Initialize Kubernetes Cluster
+### Initialize Kubernetes Cluster
+
+```shell
 ./ansible/docker-run.sh ./initialize-kubernetes-cluster.sh
 ```
 
-## Shutdown
+### Shutdown
 
 ```shell
 ./terraform/docker-run.sh ./destroy-kubernetes-infrastructure.sh
