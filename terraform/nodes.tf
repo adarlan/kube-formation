@@ -32,7 +32,7 @@ resource "aws_instance" "nodes" {
 
   vpc_security_group_ids = each.value.security_group_ids
 
-  user_data = file("aws-instance-user-data.sh")
+  user_data = file("nodes-user-data.sh")
 
   key_name = aws_key_pair.ssh_key.key_name
 }
