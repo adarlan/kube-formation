@@ -9,9 +9,10 @@ packer {
 
 source "amazon-ebs" "ubuntu" {
 
+  region   = "us-east-1"
   ami_name = "my-k8s-ami-${formatdate("YYYY-MM-DD-hh-mm", timestamp())}"
-
   ssh_username = "ubuntu"
+
   source_ami_filter {
     filters = {
       virtualization-type = "hvm"
