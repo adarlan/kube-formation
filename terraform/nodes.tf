@@ -32,7 +32,12 @@ resource "aws_instance" "nodes" {
 
   vpc_security_group_ids = each.value.security_group_ids
 
-  user_data = file("nodes-user-data.sh")
+  # Stop the instances every 5 hours in case you forget the cluster running
+  user_data = <<-EOF
+    #!/bin/bash
+    set -e
+    echo "0 */5 * * * root /sbin/shutdown -h now" >> /etc/crontab
+  EOF
 
   key_name = aws_key_pair.ssh_key.key_name
 }
