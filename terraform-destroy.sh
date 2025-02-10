@@ -4,4 +4,4 @@ cd $(dirname $0)
 
 cd terraform
 terraform init
-terraform destroy -auto-approve
+terraform destroy
