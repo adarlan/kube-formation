@@ -1,33 +1,18 @@
 # Kube Formation
 
-A project designed to practice and understand the [Kubernetes](https://kubernetes.io/) architecture by setting up a cluster using [Kubeadm](https://kubernetes.io/docs/reference/setup-tools/kubeadm/) on [Amazon EC2](https://aws.amazon.com/ec2/) instances.
+A project designed to practice and understand the [Kubernetes](https://kubernetes.io/) architecture by setting up a cluster on [Amazon EC2](https://aws.amazon.com/ec2/) instances.
 
 Requirements:
 
-- [AWS CLI](https://aws.amazon.com/cli/)
-- [Packer](https://packer.io/)
-- [Terraform](https://terraform.io/)
-- [Ansible](https://ansible.com/)
+- __AWS account__ - see [Sign up for AWS](https://portal.aws.amazon.com/billing/signup)
+- __AWS CLI__ configured to access your AWS account - see [AWS CLI installation](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) and [AWS CLI configuration](https://awscli.amazonaws.com/v2/documentation/api/latest/reference/configure/index.html)
+- __Packer__ - see [Packer installation](https://developer.hashicorp.com/packer/install)
+- __Terraform__ - see [Terraform installation](https://developer.hashicorp.com/terraform/install)
+- __Ansible__ - see [Ansible installation](https://docs.ansible.com/ansible/latest/installation_guide/intro_installation.html)
 
-## Getting Started
+Follow the steps below to set up your Kubernetes cluster. Once you've finished exploring with it, clean up resources by deprovisioning the cluster infrastructure.
 
-Follow the steps below to set up the Kubernetes cluster.
-
-Once you've finished exploring with your cluster, clean up resources by deprovisioning the cluster infrastructure.
-
-### Clone the kube-formation repository
-
-```shell
-git clone https://github.com/adarlan/kube-formation.git
-```
-
-### Navigate to the kube-formation directory
-
-```shell
-cd kube-formation
-```
-
-### Build Kubernetes Node Image
+### Build cluster node image
 
 Use Packer to create an AMI (Amazon Machine Image) for the cluster nodes:
 
@@ -35,7 +20,7 @@ Use Packer to create an AMI (Amazon Machine Image) for the cluster nodes:
 ./packer-build.sh
 ```
 
-### Apply Kubernetes Infrastructure
+### Provision cluster infrastructure
 
 Use Terraform to provision the cluster infrastructure:
 
@@ -43,9 +28,15 @@ Use Terraform to provision the cluster infrastructure:
 ./terraform-apply.sh
 ```
 
-TODO wait instances initialize?
+### Configure SSH
 
-### Initialize Kubernetes Cluster
+Prepare private key, known hosts and Ansible inventory files:
+
+```shell
+./ssh-config.sh
+```
+
+### Initialize cluster
 
 Use Ansible to initialize and join the cluster nodes:
 
@@ -55,16 +46,14 @@ Use Ansible to initialize and join the cluster nodes:
 
 ### Shutdown
 
-Destroy the cluster infrastructure:
+Deprovision the cluster infrastructure:
 
 ```shell
 ./terraform-destroy.sh
 ```
 
-Deregister AMI:
+Deregister the cluster node image:
 
 ```shell
 ./ami-deregister.sh
 ```
-
-Manually delete EBS snapshots created by CreateImage.
