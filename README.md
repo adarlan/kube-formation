@@ -14,7 +14,7 @@ Follow the steps below to set up your Kubernetes cluster. Once you've finished e
 
 ### Build cluster node image
 
-Use Packer to create an AMI (Amazon Machine Image) for the cluster nodes:
+Use Packer to create an AMI (Amazon Machine Image) for the cluster nodes. The AMI will be based on Ubuntu and preconfigured with `containerd`, `kubeadm`, `kubelet` and `kubectl` to streamline cluster initialization.
 
 ```shell
 ./packer-build.sh
@@ -22,7 +22,7 @@ Use Packer to create an AMI (Amazon Machine Image) for the cluster nodes:
 
 ### Provision cluster infrastructure
 
-Use Terraform to provision the cluster infrastructure:
+Use Terraform to provision the cluster infrastructure, which includes three `t4g.small` instances (one control plane and two worker nodes) along with an SSH key pair and security groups configured to enable node communication, SSH access, and service connectivity.
 
 ```shell
 ./terraform-apply.sh
@@ -30,7 +30,7 @@ Use Terraform to provision the cluster infrastructure:
 
 ### Configure SSH
 
-Prepare private key, known hosts and Ansible inventory files:
+Prepare the private key, known hosts and Ansible inventory files. These will be used by Ansible to connect to the cluster nodes.
 
 ```shell
 ./ssh-config.sh
@@ -38,7 +38,7 @@ Prepare private key, known hosts and Ansible inventory files:
 
 ### Initialize cluster
 
-Use Ansible to initialize and join the cluster nodes:
+Use Ansible to initialize and join the cluster nodes. Ansible will connect to the nodes and execute the `kubeadm init` command on the control plane node and the `kubeadm join` command on the worker nodes to complete the cluster setup.
 
 ```shell
 ./ansible-playbook.sh
@@ -46,13 +46,17 @@ Use Ansible to initialize and join the cluster nodes:
 
 ### Shutdown
 
-Deprovision the cluster infrastructure:
+#### Deprovision cluster infrastructure
+
+Use Terraform to destroy the cluster infrastructure. This will terminate the instances and remove the SSH key pair and security groups.
 
 ```shell
 ./terraform-destroy.sh
 ```
 
-Deregister the cluster node image:
+#### Deregister cluster node image
+
+Use the AWS CLI to deregister any AMIs related to this project and delete the corresponding EBS snapshots.
 
 ```shell
 ./ami-deregister.sh
