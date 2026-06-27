@@ -1,0 +1,206 @@
+---
+- name: Prepare machines
+  hosts: k8s
+  become: true
+  tasks:
+
+    # -----------------------------------------------------------------------------
+    # DISABLE SWAP
+    # 
+    # Swap is disabled because the kubelet expects predictable memory management.
+
+    - name: Disable swap memory
+      command: swapoff -a
+      when: ansible_facts["swaptotal_mb"] > 0
+
+    # Edit /etc/fstab to prevent swap from being re-enabled after reboot.
+    - name: Comment swap in fstab (persist disable)
+      replace:
+        path: /etc/fstab
+        regexp: '^([^#].*\sswap\s.*)$'
+        replace: '# \1'
+
+    # -----------------------------------------------------------------------------
+    # LOAD KERNEL MODULES
+    # 
+    # Load the Linux kernel modules required by Kubernetes.
+
+    - name: Load kernel modules
+      modprobe:
+        name: "{{ item }}"
+      loop:
+        - overlay
+          # Enables OverlayFS, a union filesystem used by container runtimes for
+          # image and container layers. Container images are stored and layered
+          # using OverlayFS, making containers efficient and fast.
+        - br_netfilter
+          # Load the bridge netfilter module. This module allows Linux bridge
+          # traffic to be processed by iptables. Without it, Kubernetes
+          # networking components may not correctly apply network policies,
+          # service rules, or kube-proxy rules to pod traffic.
+
+    # Ensure that the modules are automatically loaded on future boots. Files
+    # in /etc/modules-load.d/ tell the system which kernel modules to load
+    # during boot.
+    - name: Persist kernel modules
+      copy:
+        dest: /etc/modules-load.d/k8s.conf
+        content: |
+          overlay
+          br_netfilter
+
+    # -----------------------------------------------------------------------------
+    # CONFIGURE NETWORK
+    # 
+    # Configure kernel networking parameters required by Kubernetes.
+    # These settings ensure bridged traffic is processed by iptables/ip6tables and enable IPv4 packet forwarding.
+    # The configuration is persisted across reboots.
+
+    - name: Configure sysctl for Kubernetes networking
+      copy:
+        dest: /etc/sysctl.d/k8s.conf
+        content: |
+          net.bridge.bridge-nf-call-iptables  = 1
+          net.bridge.bridge-nf-call-ip6tables = 1
+          net.ipv4.ip_forward                 = 1
+      register: sysctl_config
+
+    # Apply the sysctl configuration immediately without requiring a reboot.
+    - name: Apply sysctl settings
+      command: sysctl --system
+      when: sysctl_config.changed
+
+    # -----------------------------------------------------------------------------
+    # INSTALL BASE PACKAGES
+    # 
+    # Packages required for installing containerd, kubeadm, kubelet, and kubectl.
+
+    - name: Install base dependencies
+      apt:
+        name:
+          - ca-certificates
+          - curl
+          - gpg
+        update_cache: yes
+        state: present
+
+    # -----------------------------------------------------------------------------
+    # INSTALL CONTAINER RUNTIME
+    # 
+    # containerd is the container runtime we are going to use:
+    # https://github.com/containerd/containerd/blob/main/docs/getting-started.md
+    # 
+    # The containerd.io packages in DEB and RPM formats are distributed by Docker, not by the containerd project.
+    # See Docker instalation guide for reference: https://docs.docker.com/engine/install/ubuntu/#install-using-the-repository
+
+    - name: Add Docker GPG key
+      get_url:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        dest: /etc/apt/keyrings/docker.asc
+        mode: "0644"
+
+    - name: Add Docker repo
+      copy:
+        dest: /etc/apt/sources.list.d/docker.sources
+        content: |
+          Types: deb
+          URIs: https://download.docker.com/linux/ubuntu
+          Suites: {{ ansible_facts["lsb"]["codename"] }}
+          Architectures: arm64
+          Components: stable
+          Signed-By: /etc/apt/keyrings/docker.asc
+      # TODO `Architectures: {{ ansible_facts["architecture"] }}`
+      #   Results in: `Architectures: aarch64`
+      #   Instead of: `Architectures: arm64`
+
+    - name: Install containerd
+      apt:
+        name: containerd.io
+        update_cache: yes
+
+    # Generate the containerd configuration file from the default containerd configuration.
+    - name: Read default containerd config
+      command: containerd config default
+      register: containerd_default
+      changed_when: false
+
+    # Enable SystemdCgroup so containerd uses systemd as the cgroup driver for runc.
+    # Kubernetes recommends using the same cgroup driver as the kubelet to avoid resource management and stability issues.
+    - name: Enable systemd cgroup driver
+      copy:
+        dest: /etc/containerd/config.toml
+        content: >-
+          {{
+            containerd_default.stdout
+            | regex_replace('SystemdCgroup = false', 'SystemdCgroup = true')
+          }}
+        mode: "0644"
+      register: containerd_config
+
+    # Restart containerd with the new configuration
+    - name: Restart containerd
+      systemd:
+        name: containerd
+        state: restarted
+        enabled: true
+      when: containerd_config.changed
+
+    # -----------------------------------------------------------------------------
+    # INSTALL KUBERNETES PACKAGES
+    # 
+    # kubeadm - The command line tool to bootstrap the cluster.
+    # kubelet - The component that runs on all of the machines in the cluster and does things like starting pods and containers.
+    # kubectl - The command line util to talk to the cluster.
+    # 
+    # Installation guide for reference:
+    # https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/
+
+    # TODO Add kubernetes_version variable instead of hardcoding?
+
+    # Download the public signing key for the Kubernetes package repositories.
+    - name: Add Kubernetes key
+      get_url:
+        url: https://pkgs.k8s.io/core:/stable:/v1.36/deb/Release.key
+        dest: /tmp/k8s.key
+
+    - name: Dearmor Kubernetes key
+      command: gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg /tmp/k8s.key
+      args:
+        creates: /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+
+    # Add the appropriate Kubernetes apt repository.
+    - name: Add Kubernetes repo
+      copy:
+        dest: /etc/apt/sources.list.d/kubernetes.list
+        content: |
+          deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.36/deb/ /
+
+    # Install kubelet, kubeadm, and kubectl.
+    - name: Install Kubernetes tools
+      apt:
+        name:
+          - kubelet
+          - kubeadm
+          - kubectl
+        update_cache: yes
+        state: present
+      # TODO pin the same version as the kubernetes version being installed
+
+    # Pin versions.
+    - name: Hold Kubernetes versions
+      dpkg_selections:
+        name: "{{ item }}"
+        selection: hold
+      loop:
+        - kubelet
+        - kubeadm
+        - kubectl
+
+    # Enable the kubelet service before running kubeadm.
+    # The kubelet will be restarting every few seconds, as it waits in a crashloop for kubeadm to tell it what to do.
+    - name: Enable kubelet
+      systemd:
+        name: kubelet
+        enabled: true
+        state: started
+    # TODO Check if need to restart after reboot

@@ -1,0 +1,89 @@
+---
+- name: Bootstrap control plane
+  hosts: bootstrap_control_plane
+  become: true
+  tasks:
+    - name: Initialize cluster
+      command: >
+        kubeadm init
+        --node-name {{ inventory_hostname }}
+        --pod-network-cidr=10.244.0.0/16
+        --apiserver-cert-extra-sans={{ ansible_host }}
+        --control-plane-endpoint={{ ansible_host }}:6443
+      args:
+        creates: /etc/kubernetes/admin.conf
+
+    # Bootstrap tokens are used for establishing bidirectional trust between a node joining the cluster and a control-plane node.
+    - name: Create bootstrap token
+      command: kubeadm token create --print-join-command
+      register: join_command
+    - name: Store join command
+      set_fact:
+        join_command: "{{ join_command.stdout }}"
+
+    # Upload control plane certificates to the kubeadm-certs Secret.
+    # Store the certificates in Secret "kubeadm-certs" in the "kube-system" Namespace.
+    - name: Upload certificates
+      command: kubeadm init phase upload-certs --upload-certs
+      register: upload_certs
+    - name: Extract certificate key
+      set_fact:
+        certificate_key: "{{ upload_certs.stdout_lines[-1] }}"
+
+    # Install CNI plugin
+    # TODO Explain why
+    - name: Download Flannel manifest
+      get_url:
+        url: https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
+        # TODO Use a specific version instead of latest
+        dest: /tmp/kube-flannel.yml
+        mode: "0644"
+    - name: Apply Flannel manifest
+      command: kubectl apply -f /tmp/kube-flannel.yml
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      register: flannel_apply
+      changed_when: "'created' in flannel_apply.stdout or 'configured' in flannel_apply.stdout"
+
+    # Download kubeconfig
+    - name: Read admin.conf
+      slurp:
+        src: /etc/kubernetes/admin.conf
+      register: admin_conf
+    - name: Save kubeconfig locally
+      delegate_to: localhost
+      become: false
+      copy:
+        dest: ./kubeconfig
+        content: >-
+          {{
+            admin_conf.content
+            | b64decode
+            | regex_replace('https://[^:]+:6443', 'https://' ~ ansible_host ~ ':6443')
+          }}
+        # TODO use kubernetes_endpoint variable?
+
+- name: Additional control planes
+  hosts: control_plane:!bootstrap_control_plane
+  become: true
+  tasks:
+    # TODO Error when joining a second control plane
+    - name: Join control plane
+      command: >-
+        {{ hostvars[groups['bootstrap_control_plane'][0]].join_command }}
+        --control-plane
+        --certificate-key {{ hostvars[groups['bootstrap_control_plane'][0]].certificate_key }}
+        --node-name {{ inventory_hostname }}
+      args:
+        creates: /etc/kubernetes/kubelet.conf
+
+- name: Workers
+  hosts: workers
+  become: true
+  tasks:
+    - name: Join worker
+      command: >-
+        {{ hostvars[groups['bootstrap_control_plane'][0]].join_command }}
+        --node-name {{ inventory_hostname }}
+      args:
+        creates: /etc/kubernetes/kubelet.conf

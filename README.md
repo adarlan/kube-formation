@@ -1,6 +1,6 @@
 # Kube Formation
 
-A project designed to practice and understand the [Kubernetes](https://kubernetes.io/) architecture by setting up a cluster on [Amazon EC2](https://aws.amazon.com/ec2/) instances. This project leverages [Packer](https://www.packer.io/) to create images for the cluster nodes, [Terraform](https://www.terraform.io/) to provision the infrastructure, and [Ansible](https://ansible.com/) to initialize the cluster.
+A project designed to practice and understand the [Kubernetes](https://kubernetes.io/) architecture by setting up a cluster on [Amazon EC2](https://aws.amazon.com/ec2/) instances. This project leverages [Terraform](https://www.terraform.io/) to provision the infrastructure, and [Ansible](https://ansible.com/) to create the cluster.
 
 ## Requirements
 
@@ -8,15 +8,53 @@ Ensure you have the following installed and configured before proceeding:
 
 - __AWS account__ - see [Sign up for AWS](https://portal.aws.amazon.com/billing/signup)
 - __AWS CLI__ configured to access your AWS account - see [AWS CLI installation guide](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) and [AWS CLI configuration guide](https://awscli.amazonaws.com/v2/documentation/api/latest/reference/configure/index.html)
-- __Packer__ - see [Packer installation guide](https://developer.hashicorp.com/packer/install)
+<!-- - __Packer__ - see [Packer installation guide](https://developer.hashicorp.com/packer/install) -->
 - __Terraform__ - see [Terraform installation guide](https://developer.hashicorp.com/terraform/install)
 - __Ansible__ - see [Ansible installation guide](https://docs.ansible.com/ansible/latest/installation_guide/intro_installation.html)
 
-## Setup Instructions
+## Configure AWS credentials
+
+...
+
+## Setup
 
 Follow the steps below to set up your Kubernetes cluster. Once finished, you can clean up the resources by deprovisioning the cluster infrastructure.
 
-### 1. Build Node Image
+```shell
+terraform init
+terraform apply
+./ssh-config.sh
+ansible-playbook prepare-machines.yml
+ansible-playbook create-cluster.yml
+kubectl get nodes
+```
+
+## Stop & Restart
+
+To save money, stop the machines when you are no longer playing with the cluster.
+
+Note: You still will be charged for EBS volumes?
+
+When restarting, the IPs will change.
+Need to run create-cluster playbook again?
+I think it breaks the cluster.
+Investigate and fix, or use EIPs (additional cost when not used).
+
+# Runbooks
+
+Troubleshooting...
+
+```shell
+sudo journalctl -u kubelet
+```
+
+## Shutdown
+
+```shell
+terraform destroy
+```
+
+<!-- ### 1. Build Node Image
 
 Use Packer to create an Amazon Machine Image (AMI) for the cluster nodes. The AMI is based on Ubuntu and preconfigured with essential Kubernetes components ([kubeadm](https://kubernetes.io/docs/reference/setup-tools/kubeadm/), [kubelet](https://kubernetes.io/docs/reference/command-line-tools-reference/kubelet/), [kubectl](https://kubernetes.io/docs/reference/kubectl/) and [containerd](https://containerd.io/)) to simplify cluster initialization.
 
@@ -66,7 +104,7 @@ Use the AWS CLI to deregister any AMIs created for this project and delete their
 
 ```shell
 ./ami-deregister.sh
-```
+``` -->
 
 ## Contributing
 

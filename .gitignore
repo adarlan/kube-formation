@@ -1,0 +1,12 @@
+.env
+
+terraform.*
+.terraform
+*.terraform
+*.terraform.*
+
+private_key
+known_hosts
+inventory.ini
+
+kubeconfig
