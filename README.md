@@ -1,111 +1,110 @@
 # Kube Formation
 
-A project designed to practice and understand the [Kubernetes](https://kubernetes.io/) architecture by setting up a cluster on [Amazon EC2](https://aws.amazon.com/ec2/) instances. This project leverages [Terraform](https://www.terraform.io/) to provision the infrastructure, and [Ansible](https://ansible.com/) to create the cluster.
+A project designed to practice and understand the [Kubernetes](https://kubernetes.io/) architecture by setting up a cluster on [Amazon EC2](https://aws.amazon.com/ec2/) instances. Terraform provisions the infrastructure and Ansible bootstraps the cluster.
+
+The default topology is one control plane node and one worker node, both ARM64 `t4g.small` instances running Ubuntu 22.04. Instances auto-shutdown after 3 hours as a cost safeguard.
 
 ## Requirements
 
-Ensure you have the following installed and configured before proceeding:
+- [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)
+- [Terraform](https://developer.hashicorp.com/terraform/install)
+- [Ansible](https://docs.ansible.com/ansible/latest/installation_guide/intro_installation.html)
+- [kubectl](https://kubernetes.io/docs/tasks/tools/)
+- [jq](https://jqlang.org/download/)
 
-- __AWS account__ - see [Sign up for AWS](https://portal.aws.amazon.com/billing/signup)
-- __AWS CLI__ configured to access your AWS account - see [AWS CLI installation guide](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) and [AWS CLI configuration guide](https://awscli.amazonaws.com/v2/documentation/api/latest/reference/configure/index.html)
-<!-- - __Packer__ - see [Packer installation guide](https://developer.hashicorp.com/packer/install) -->
-- __Terraform__ - see [Terraform installation guide](https://developer.hashicorp.com/terraform/install)
-- __Ansible__ - see [Ansible installation guide](https://docs.ansible.com/ansible/latest/installation_guide/intro_installation.html)
+<!-- ## Configure AWS credentials
 
-## Configure AWS credentials
+Copy `.env` and fill in your credentials:
 
-...
+```shell
+cp .env .env.local  # or edit .env directly (it is gitignored)
+```
+
+```shell
+export KUBECONFIG="kubeconfig"
+export AWS_REGION="us-east-1"
+export AWS_ACCESS_KEY_ID="..."
+export AWS_SECRET_ACCESS_KEY="..."
+```
+
+Then source it before running any command:
+
+```shell
+source .env
+``` -->
 
 ## Setup
 
-Follow the steps below to set up your Kubernetes cluster. Once finished, you can clean up the resources by deprovisioning the cluster infrastructure.
+```shell
+./setup.sh
+```
+
+This will:
+1. Initialize and apply Terraform — provisions EC2 instances, security groups, and an SSH key pair
+2. Configure local SSH access — extracts the private key, scans known hosts, and generates the Ansible inventory
+3. Prepare the nodes — installs containerd, kubeadm, kubelet, and kubectl on all nodes
+4. Create the cluster — runs `kubeadm init` on the control plane, joins the worker nodes, installs the Flannel CNI plugin, and saves the kubeconfig locally
+
+Verify the cluster is up:
 
 ```shell
-terraform init
-terraform apply
-./ssh-config.sh
-ansible-playbook prepare-nodes.yml
-ansible-playbook create-cluster.yml
 kubectl get nodes
 ```
 
-## Stop & Restart
+## Pause & Resume
 
-To save money, stop the machines when you are no longer playing with the cluster.
+Stop the instances when you are no longer using the cluster to avoid compute charges. Note that EBS volumes are still charged while instances are stopped.
 
-Note: You still will be charged for EBS volumes?
+```shell
+./pause.sh
+```
 
-When restarting, the IPs will change.
-Need to run create-cluster playbook again?
-I think it breaks the cluster.
-Investigate and fix, or use EIPs (additional cost when not used).
+```shell
+./resume.sh
+```
 
-# Runbooks
+When resuming, the instances receive new public IPs, so the cluster is reset and recreated automatically.
 
-Troubleshooting...
+## Connecting to nodes
+
+SSH into a node directly:
+
+```shell
+./ssh-into.sh controlplane1
+./ssh-into.sh worker1
+```
+
+Or connect via [AWS Systems Manager Session Manager](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager.html) (no open SSH port required — requires the [Session Manager plugin](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html)):
+
+```shell
+./ssm-into.sh controlplane1
+./ssm-into.sh worker1
+```
+
+## Deploy a sample app
+
+`manifest.yaml` deploys an nginx `Deployment` with 10 replicas and exposes it via a `NodePort` on port 30000:
+
+```shell
+kubectl apply -f manifest.yaml
+```
+
+Access it at `http://<worker-public-ip>:30000`.
+
+## Destroy
+
+```shell
+./destroy.sh
+```
+
+<!-- ## Troubleshooting
+
+Debug kubelet issues on a node:
 
 ```shell
 sudo journalctl -u kubelet
-```
-
-## Shutdown
-
-```shell
-terraform destroy
-```
-
-<!-- ### 1. Build Node Image
-
-Use Packer to create an Amazon Machine Image (AMI) for the cluster nodes. The AMI is based on Ubuntu and preconfigured with essential Kubernetes components ([kubeadm](https://kubernetes.io/docs/reference/setup-tools/kubeadm/), [kubelet](https://kubernetes.io/docs/reference/command-line-tools-reference/kubelet/), [kubectl](https://kubernetes.io/docs/reference/kubectl/) and [containerd](https://containerd.io/)) to simplify cluster initialization.
-
-```shell
-./packer-build.sh
-```
-
-### 2. Provision Infrastructure
-
-Use Terraform to provision the cluster infrastructure, including three EC2 instances (one control plane and two worker nodes) along with an SSH key pair and security groups configured to enable node communication, SSH access, and service connectivity.
-
-```shell
-./terraform-apply.sh
-```
-
-### 3. Configure SSH
-
-Prepare the private key, known hosts and Ansible inventory files. These will be used by Ansible to connect to the cluster nodes.
-
-```shell
-./ssh-config.sh
-```
-
-### 4. Initialize Cluster
-
-Use Ansible to initialize and join the cluster nodes. Ansible will connect to the nodes and execute the `kubeadm init` on the control plane and `kubeadm join` on the workers to complete the cluster setup.
-
-```shell
-./ansible-playbook.sh
-```
-
-## Shutdown & Cleanup
-
-When finished, deprovision the cluster to avoid unnecessary costs.
-
-### 1. Deprovision Infrastructure
-
-Use Terraform to destroy the infrastructure, terminating instances and removing associated resources.
-
-```shell
-./terraform-destroy.sh
-```
-
-### 2. Deregister Node Image
-
-Use the AWS CLI to deregister any AMIs created for this project and delete their associated EBS snapshots.
-
-```shell
-./ami-deregister.sh
 ``` -->
 
 ## Contributing
 
-Contributions are welcome! If you’d like to improve this project, please submit a pull request or open an issue.
+Contributions are welcome! Please submit a pull request or open an issue.
