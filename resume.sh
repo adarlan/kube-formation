@@ -12,3 +12,5 @@ terraform apply
 
 ansible k8s -b -m command -a "kubeadm reset -f"
 ansible-playbook create-cluster.yml
+
+./update-kubeconfig.sh

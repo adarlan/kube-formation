@@ -8,3 +8,5 @@ terraform apply
 
 ansible-playbook prepare-nodes.yml
 ansible-playbook create-cluster.yml
+
+./update-kubeconfig.sh

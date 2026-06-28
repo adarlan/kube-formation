@@ -55,7 +55,6 @@ locals {
         aws_security_group.control_plane_firewall.id
       ]
     }
-    # TODO error when joining the second control plane
     # "controlplane2" = {
     #   security_group_ids = [
     #     aws_security_group.node_firewall.id,
@@ -190,6 +189,14 @@ resource "aws_vpc_security_group_ingress_rule" "etcd" {
   ip_protocol       = "tcp"
   from_port         = 2379
   to_port           = 2379
+}
+
+resource "aws_vpc_security_group_ingress_rule" "etcd_peer" {
+  security_group_id = aws_security_group.control_plane_firewall.id
+  cidr_ipv4         = aws_default_vpc.default.cidr_block
+  ip_protocol       = "tcp"
+  from_port         = 2380
+  to_port           = 2380
 }
 
 resource "aws_vpc_security_group_ingress_rule" "scheduler" {

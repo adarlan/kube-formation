@@ -6,15 +6,22 @@
 
     # -----------------------------------------------------------------------------
     # DISABLE SWAP
-    # 
-    # Swap is disabled because the kubelet expects predictable memory management.
+    #
+    # Kubernetes schedules pods based on declared resource requests (CPU and
+    # memory). If swap is enabled, the OS can silently move memory pages to disk,
+    # making actual memory availability unpredictable. The kubelet cannot account
+    # for swap when making scheduling decisions or enforcing memory limits — it
+    # assumes that the memory it allocates maps directly to physical RAM. With swap
+    # enabled, a node may accept a pod it cannot truly serve, leading to degraded
+    # performance and unreliable OOMKill behavior.
 
-    - name: Disable swap memory
+    - name: Disable swap
       command: swapoff -a
       when: ansible_facts["swaptotal_mb"] > 0
 
-    # Edit /etc/fstab to prevent swap from being re-enabled after reboot.
-    - name: Comment swap in fstab (persist disable)
+    # Without this, swap entries in /etc/fstab would re-enable swap on reboot,
+    # undoing the swapoff above.
+    - name: Disable swap in fstab on reboot
       replace:
         path: /etc/fstab
         regexp: '^([^#].*\sswap\s.*)$'
@@ -22,27 +29,30 @@
 
     # -----------------------------------------------------------------------------
     # LOAD KERNEL MODULES
-    # 
-    # Load the Linux kernel modules required by Kubernetes.
+    #
+    # Two kernel modules are required before Kubernetes networking and the
+    # container runtime can function correctly.
 
     - name: Load kernel modules
       modprobe:
         name: "{{ item }}"
       loop:
         - overlay
-          # Enables OverlayFS, a union filesystem used by container runtimes for
-          # image and container layers. Container images are stored and layered
-          # using OverlayFS, making containers efficient and fast.
+          # Container images are built in layers (base OS, then application layers
+          # stacked on top). OverlayFS lets containerd mount those read-only image
+          # layers and place a single writable layer on top, giving each container
+          # its own isolated filesystem without duplicating image data on disk.
         - br_netfilter
-          # Load the bridge netfilter module. This module allows Linux bridge
-          # traffic to be processed by iptables. Without it, Kubernetes
-          # networking components may not correctly apply network policies,
-          # service rules, or kube-proxy rules to pod traffic.
+          # Kubernetes connects pods via virtual Linux bridges. Without this module,
+          # bridge traffic bypasses iptables entirely, so kube-proxy's service rules
+          # and NetworkPolicy rules would never see pod-to-pod traffic on the same
+          # node. br_netfilter routes bridge traffic through the standard netfilter
+          # hooks so those rules apply correctly.
 
-    # Ensure that the modules are automatically loaded on future boots. Files
-    # in /etc/modules-load.d/ tell the system which kernel modules to load
-    # during boot.
-    - name: Persist kernel modules
+    # Files in /etc/modules-load.d/ are read at boot time by systemd-modules-load,
+    # which loads the listed modules before any services start. Without this, the
+    # modules loaded above would be lost after a reboot.
+    - name: Load kernel modules on boot
       copy:
         dest: /etc/modules-load.d/k8s.conf
         content: |
@@ -51,10 +61,20 @@
 
     # -----------------------------------------------------------------------------
     # CONFIGURE NETWORK
-    # 
-    # Configure kernel networking parameters required by Kubernetes.
-    # These settings ensure bridged traffic is processed by iptables/ip6tables and enable IPv4 packet forwarding.
-    # The configuration is persisted across reboots.
+    #
+    # Three sysctl parameters are required for the Kubernetes network model to work:
+    #
+    #   net.bridge.bridge-nf-call-iptables / ip6tables
+    #     Tells the kernel to pass bridge traffic through the iptables/ip6tables
+    #     chains. This is what makes br_netfilter useful: kube-proxy writes service
+    #     rules and NetworkPolicy controllers write policy rules into iptables, and
+    #     these settings ensure those rules are evaluated for all pod traffic,
+    #     including traffic between pods on the same node.
+    #
+    #   net.ipv4.ip_forward
+    #     Allows the node to forward packets between network interfaces (e.g., from
+    #     the pod network interface to the physical NIC). Without this, pods can
+    #     talk to their own node but not to pods or services on other nodes.
 
     - name: Configure sysctl for Kubernetes networking
       copy:
@@ -65,33 +85,37 @@
           net.ipv4.ip_forward                 = 1
       register: sysctl_config
 
-    # Apply the sysctl configuration immediately without requiring a reboot.
     - name: Apply sysctl settings
       command: sysctl --system
       when: sysctl_config.changed
 
     # -----------------------------------------------------------------------------
     # INSTALL BASE PACKAGES
-    # 
-    # Packages required for installing containerd, kubeadm, kubelet, and kubectl.
+    #
+    # These packages are prerequisites for adding external APT repositories
+    # (Docker and Kubernetes), which require HTTPS transport and GPG key handling.
 
-    - name: Install base dependencies
+    - name: Install APT dependencies
       apt:
         name:
           - ca-certificates
-          - curl
           - gpg
         update_cache: yes
         state: present
 
     # -----------------------------------------------------------------------------
     # INSTALL CONTAINER RUNTIME
-    # 
-    # containerd is the container runtime we are going to use:
-    # https://github.com/containerd/containerd/blob/main/docs/getting-started.md
-    # 
-    # The containerd.io packages in DEB and RPM formats are distributed by Docker, not by the containerd project.
-    # See Docker instalation guide for reference: https://docs.docker.com/engine/install/ubuntu/#install-using-the-repository
+    #
+    # Kubernetes does not run containers itself. Instead, the kubelet delegates
+    # all container lifecycle operations (pull image, create container, start/stop,
+    # report status) to a Container Runtime Interface (CRI) plugin. containerd is
+    # the industry-standard CRI implementation. It manages images and hands off
+    # actual container creation to runc, the low-level OCI runtime that sets up
+    # Linux namespaces and cgroups for each container process.
+    #
+    # The containerd.io package (distributed by Docker, not the containerd project)
+    # bundles containerd and runc together.
+    # See: https://docs.docker.com/engine/install/ubuntu/#install-using-the-repository
 
     - name: Add Docker GPG key
       get_url:
@@ -99,33 +123,35 @@
         dest: /etc/apt/keyrings/docker.asc
         mode: "0644"
 
-    - name: Add Docker repo
+    - name: Add Docker APT repository
       copy:
         dest: /etc/apt/sources.list.d/docker.sources
         content: |
           Types: deb
           URIs: https://download.docker.com/linux/ubuntu
           Suites: {{ ansible_facts["lsb"]["codename"] }}
-          Architectures: arm64
+          Architectures: {{ {"x86_64": "amd64", "aarch64": "arm64"}[ansible_facts["architecture"]] }}
           Components: stable
           Signed-By: /etc/apt/keyrings/docker.asc
-      # TODO `Architectures: {{ ansible_facts["architecture"] }}`
-      #   Results in: `Architectures: aarch64`
-      #   Instead of: `Architectures: arm64`
 
-    - name: Install containerd
+    - name: Install containerd runtime
       apt:
         name: containerd.io
         update_cache: yes
 
-    # Generate the containerd configuration file from the default containerd configuration.
-    - name: Read default containerd config
+    # containerd ships with a built-in config generator. We use its output as a
+    # baseline so we inherit all defaults, then patch only what we need to change.
+    - name: Read containerd default config
       command: containerd config default
       register: containerd_default
       changed_when: false
 
-    # Enable SystemdCgroup so containerd uses systemd as the cgroup driver for runc.
-    # Kubernetes recommends using the same cgroup driver as the kubelet to avoid resource management and stability issues.
+    # Both containerd and the kubelet manage cgroups — containerd to enforce per-
+    # container resource limits, and kubelet to enforce per-pod limits. They must
+    # use the same cgroup driver. On systemd-based systems (like Ubuntu 22.04),
+    # systemd already owns the cgroup hierarchy, so both must be configured to
+    # delegate to systemd rather than managing cgroups directly. Mixing drivers
+    # causes duplicate cgroup hierarchies and unpredictable resource accounting.
     - name: Enable systemd cgroup driver
       copy:
         dest: /etc/containerd/config.toml
@@ -137,7 +163,6 @@
         mode: "0644"
       register: containerd_config
 
-    # Restart containerd with the new configuration
     - name: Restart containerd
       systemd:
         name: containerd
@@ -147,35 +172,44 @@
 
     # -----------------------------------------------------------------------------
     # INSTALL KUBERNETES PACKAGES
-    # 
-    # kubeadm - The command line tool to bootstrap the cluster.
-    # kubelet - The component that runs on all of the machines in the cluster and does things like starting pods and containers.
-    # kubectl - The command line util to talk to the cluster.
-    # 
-    # Installation guide for reference:
-    # https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/
+    #
+    # Three components are installed on every node:
+    #
+    #   kubelet   The node agent. Watches the API server for pods assigned to this
+    #             node, instructs containerd to run the required containers, and
+    #             reports node and pod status back to the control plane. It runs as
+    #             a systemd service on every node (control plane and worker alike).
+    #
+    #   kubeadm   A bootstrap tool that automates cluster setup: it generates TLS
+    #             certificates, writes static pod manifests for the control plane
+    #             components (API server, etcd, controller manager, scheduler), and
+    #             produces the join tokens that workers use to register themselves.
+    #
+    #   kubectl   The CLI for the Kubernetes API. Strictly optional on worker nodes
+    #             but included everywhere for debugging convenience.
+    #
+    # See: https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/
 
-    # TODO Add kubernetes_version variable instead of hardcoding?
-
-    # Download the public signing key for the Kubernetes package repositories.
-    - name: Add Kubernetes key
+    - name: Add Kubernetes APT signing key
       get_url:
         url: https://pkgs.k8s.io/core:/stable:/v1.36/deb/Release.key
         dest: /tmp/k8s.key
 
-    - name: Dearmor Kubernetes key
+    # GPG keys distributed as ASCII-armored text must be converted to binary
+    # format before APT can use them for signature verification.
+    - name: Convert Kubernetes key to GPG binary format
       command: gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg /tmp/k8s.key
       args:
         creates: /etc/apt/keyrings/kubernetes-apt-keyring.gpg
 
-    # Add the appropriate Kubernetes apt repository.
-    - name: Add Kubernetes repo
+    - name: Add Kubernetes APT repository
       copy:
         dest: /etc/apt/sources.list.d/kubernetes.list
         content: |
           deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.36/deb/ /
 
-    # Install kubelet, kubeadm, and kubectl.
+    # The repo URL already pins the minor version (v1.36), so apt only resolves
+    # packages published for that release stream.
     - name: Install Kubernetes tools
       apt:
         name:
@@ -184,10 +218,11 @@
           - kubectl
         update_cache: yes
         state: present
-      # TODO pin the same version as the kubernetes version being installed
 
-    # Pin versions.
-    - name: Hold Kubernetes versions
+    # Prevent unattended-upgrades or manual apt upgrade from pulling in a newer
+    # patch release. Kubernetes requires all nodes in a cluster to run the same
+    # minor version; an accidental upgrade on one node can break the cluster.
+    - name: Pin Kubernetes package versions
       dpkg_selections:
         name: "{{ item }}"
         selection: hold
@@ -196,11 +231,12 @@
         - kubeadm
         - kubectl
 
-    # Enable the kubelet service before running kubeadm.
-    # The kubelet will be restarting every few seconds, as it waits in a crashloop for kubeadm to tell it what to do.
+    # Enable kubelet now so it is ready when kubeadm runs in create-cluster.yml.
+    # Until kubeadm provides its configuration, kubelet will crash-loop — this is
+    # expected and harmless. kubeadm will drop the configuration files and kubelet
+    # will stabilize once the cluster is initialized.
     - name: Enable kubelet
       systemd:
         name: kubelet
         enabled: true
         state: started
-    # TODO Check if need to restart after reboot

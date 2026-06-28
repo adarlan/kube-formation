@@ -43,7 +43,8 @@ This will:
 1. Initialize and apply Terraform — provisions EC2 instances, security groups, and an SSH key pair
 2. Configure local SSH access — extracts the private key, scans known hosts, and generates the Ansible inventory
 3. Prepare the nodes — installs containerd, kubeadm, kubelet, and kubectl on all nodes
-4. Create the cluster — runs `kubeadm init` on the control plane, joins the worker nodes, installs the Flannel CNI plugin, and saves the kubeconfig locally
+4. Create the cluster — runs `kubeadm init` on the control plane, joins the worker nodes, and installs the Flannel CNI plugin
+5. Configure kubectl — extracts credentials from the control plane and updates local kubeconfig
 
 Verify the cluster is up:
 
@@ -72,13 +73,6 @@ SSH into a node directly:
 ```shell
 ./ssh-into.sh controlplane1
 ./ssh-into.sh worker1
-```
-
-Or connect via [AWS Systems Manager Session Manager](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager.html) (no open SSH port required — requires the [Session Manager plugin](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html)):
-
-```shell
-./ssm-into.sh controlplane1
-./ssm-into.sh worker1
 ```
 
 ## Deploy a sample app

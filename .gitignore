@@ -9,4 +9,5 @@ private_key
 known_hosts
 inventory.ini
 
-kubeconfig
+*.crt
+*.key
