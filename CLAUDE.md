@@ -18,14 +18,14 @@ source .env
 terraform init
 terraform apply         # provisions EC2 instances, generates inventory.ini
 ./ssh-config.sh         # extracts private key, scans known_hosts, tests Ansible ping
-ansible-playbook prepare-machines.yml   # installs containerd + kubeadm/kubelet/kubectl on all nodes
+ansible-playbook prepare-nodes.yml   # installs containerd + kubeadm/kubelet/kubectl on all nodes
 ansible-playbook create-cluster.yml     # kubeadm init, joins workers, installs Flannel CNI, saves kubeconfig
 kubectl get nodes
 ```
 
 **Save money (stop/restart):** IPs change on restart, so re-run `ssh-config.sh` and `create-cluster.yml`.
 ```shell
-./stop-machines.sh
+./stop-instances.sh
 ./resume.sh && ./ssh-config.sh && ansible-playbook create-cluster.yml
 ```
 
@@ -52,7 +52,7 @@ ssh-config.sh
   └─ Reads private_key and IPs from terraform output
   └─ Writes known_hosts via ssh-keyscan
 
-prepare-machines.yml  →  hosts: k8s (all nodes)
+prepare-nodes.yml  →  hosts: k8s (all nodes)
   └─ Disables swap, loads overlay + br_netfilter, configures sysctl
   └─ Installs containerd.io from Docker repo; enables systemd cgroup driver
   └─ Installs kubeadm/kubelet/kubectl from pkgs.k8s.io (v1.36), holds versions
@@ -67,7 +67,7 @@ Generated files (all gitignored): `inventory.ini`, `private_key`, `known_hosts`,
 
 ## AMI (optional, currently inactive)
 
-`ami/` contains a Packer build (`main.pkr.hcl` + `provisioner-script.sh`) that bakes a custom AMI with containerd and Kubernetes tools pre-installed. The main flow above skips this and uses stock Ubuntu, running `prepare-machines.yml` instead. The `up.sh` script at the root is an older all-in-one script that references the Packer build — it is not the current workflow.
+`ami/` contains a Packer build (`main.pkr.hcl` + `provisioner-script.sh`) that bakes a custom AMI with containerd and Kubernetes tools pre-installed. The main flow above skips this and uses stock Ubuntu, running `prepare-nodes.yml` instead. The `up.sh` script at the root is an older all-in-one script that references the Packer build — it is not the current workflow.
 
 ## Troubleshooting
 

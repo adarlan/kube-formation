@@ -106,10 +106,31 @@ resource "aws_instance" "nodes" {
   }
 }
 
-output "instance_ids" {
-  value = [
-    for key in keys(local.nodes) : aws_instance.nodes[key].id
-  ]
+output "nodes" {
+  value = {
+    for key in keys(local.nodes) : key => {
+      public_ip   = aws_instance.nodes[key].public_ip
+      instance_id = aws_instance.nodes[key].id
+    }
+  }
+}
+
+output "control_plane_nodes" {
+  value = {
+    for key in keys(local.control_plane_nodes) : key => {
+      public_ip   = aws_instance.nodes[key].public_ip
+      instance_id = aws_instance.nodes[key].id
+    }
+  }
+}
+
+output "worker_nodes" {
+  value = {
+    for key in keys(local.worker_nodes) : key => {
+      public_ip   = aws_instance.nodes[key].public_ip
+      instance_id = aws_instance.nodes[key].id
+    }
+  }
 }
 
 # Default VPC
@@ -218,14 +239,6 @@ output "service_endpoint" {
   value = local.service_endpoint
 }
 
-# Node IP addresses
-
-output "ips" {
-  value = [
-    for key in keys(local.nodes) : aws_instance.nodes[key].public_ip
-  ]
-}
-
 # SSM
 
 resource "aws_iam_role" "ssm" {
@@ -251,29 +264,4 @@ resource "aws_iam_role_policy_attachment" "ssm" {
 resource "aws_iam_instance_profile" "ssm" {
   name = "ec2-ssm-profile"
   role = aws_iam_role.ssm.name
-}
-
-# Ansible inventory
-
-resource "local_file" "inventory" {
-  filename = "${path.module}/inventory.ini"
-
-  content = <<-EOF
-    [bootstrap_control_plane]
-    controlplane1 ansible_host=${aws_instance.nodes["controlplane1"].public_ip}
-
-    [control_plane]
-    ${join("\n", [for key in keys(local.control_plane_nodes) : "${key} ansible_host=${aws_instance.nodes[key].public_ip}"])}
-
-    [workers]
-    ${join("\n", [for key in keys(local.worker_nodes) : "${key} ansible_host=${aws_instance.nodes[key].public_ip}"])}
-
-    [k8s:children]
-    control_plane
-    workers
-
-    [k8s:vars]
-    ansible_user=ubuntu
-    ansible_python_interpreter=/usr/bin/python3
-  EOF
 }

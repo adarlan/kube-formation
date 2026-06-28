@@ -24,7 +24,7 @@ Follow the steps below to set up your Kubernetes cluster. Once finished, you can
 terraform init
 terraform apply
 ./ssh-config.sh
-ansible-playbook prepare-machines.yml
+ansible-playbook prepare-nodes.yml
 ansible-playbook create-cluster.yml
 kubectl get nodes
 ```
