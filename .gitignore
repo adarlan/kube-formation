@@ -1,13 +1,18 @@
 .env
 
-terraform.*
+ssh/
+id_ed25519
+id_ed25519.pub
+
+tfstate
+tfstate.*
+*.tfstate
+*.tfstate.*
 .terraform
-*.terraform
-*.terraform.*
 
-private_key
 known_hosts
-inventory.ini
+*.ini
 
+kubeconfig/
 *.crt
 *.key

@@ -1,5 +1,5 @@
 ---
-- name: Prepare nodes
+- name: Configure nodes
   hosts: k8s
   become: true
   tasks:

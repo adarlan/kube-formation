@@ -8,35 +8,48 @@ Provisions a Kubernetes cluster on AWS EC2 using Terraform (infrastructure) and 
 
 ## Prerequisites
 
-AWS CLI configured, Terraform, Ansible, kubectl, and jq installed locally. AWS credentials and `KUBECONFIG` are set in `.env` (gitignored — copy and fill in before running anything).
+AWS CLI configured, Terraform, Ansible, kubectl, jq, and yq installed locally. AWS credentials must be set in the environment before running anything.
 
 ## Cluster lifecycle
 
-**Bring up:**
+**Bring up (single command):**
 ```shell
-source .env
+./setup.sh
+```
+This runs: `terraform init && terraform apply` → `ssh-config.sh` → `prepare-nodes.yml` → `create-cluster.yml` → `update-kubeconfig.sh`
+
+**Bring up (step by step):**
+```shell
 terraform init
 terraform apply         # provisions EC2 instances, generates inventory.ini
-./ssh-config.sh         # extracts private key, scans known_hosts, tests Ansible ping
+./ssh-config.sh         # extracts private key, scans known_hosts, generates inventory.ini, tests ping
 ansible-playbook prepare-nodes.yml   # installs containerd + kubeadm/kubelet/kubectl on all nodes
-ansible-playbook create-cluster.yml     # kubeadm init, joins workers, installs Flannel CNI, saves kubeconfig
+ansible-playbook create-cluster.yml  # kubeadm init, joins workers, installs Flannel CNI
+./update-kubeconfig.sh               # extracts creds from control plane, sets kubectl context kube-formation
 kubectl get nodes
 ```
 
-**Save money (stop/restart):** IPs change on restart, so re-run `ssh-config.sh` and `create-cluster.yml`.
+**Pause & resume:** EIPs keep IPs stable across stop/start, so the cluster persists on EBS and comes back up on its own.
 ```shell
-./stop-instances.sh
-./resume.sh && ./ssh-config.sh && ansible-playbook create-cluster.yml
+./ec2-stop.sh
+./ec2-start.sh
 ```
 
 **Tear down:**
 ```shell
-terraform destroy
+./destroy.sh
+```
+
+**SSH into a node:**
+```shell
+./ssh-into.sh controlplane1
+./ssh-into.sh worker1
 ```
 
 **Deploy a sample app:**
 ```shell
 kubectl apply -f manifest.yaml   # nginx Deployment (10 replicas) + NodePort :30000
+# Access at http://<worker-public-ip>:30000
 ```
 
 ## Architecture
@@ -44,7 +57,7 @@ kubectl apply -f manifest.yaml   # nginx Deployment (10 replicas) + NodePort :30
 ```
 infra.tf
   └─ EC2 instances (for_each over local.nodes map)
-  └─ Security groups: node_firewall (all nodes), control_plane_firewall, worker_firewall
+  └─ Security groups: node-firewall (all nodes), control-plane-firewall, worker-firewall
   └─ SSM IAM role (allows AWS Systems Manager access without bastion)
   └─ Outputs: nodes, control_plane_nodes, worker_nodes (maps of name → {public_ip, instance_id})
 
@@ -59,12 +72,17 @@ prepare-nodes.yml  →  hosts: k8s (all nodes)
   └─ Installs kubeadm/kubelet/kubectl from pkgs.k8s.io (v1.36), holds versions
 
 create-cluster.yml
-  └─ bootstrap_control_plane: kubeadm init, Flannel CNI, saves kubeconfig locally
-  └─ control_plane (additional): kubeadm join --control-plane (currently errors on second CP)
-  └─ workers: kubeadm join
+  └─ bootstrap_control_plane: kubeadm init, Flannel CNI, stores join_command + certificate_key as host facts
+  └─ control_plane (additional): kubeadm join --control-plane using stored facts
+  └─ workers: kubeadm join using stored join_command
+
+update-kubeconfig.sh
+  └─ SSHes into controlplane1, reads /etc/kubernetes/admin.conf
+  └─ Extracts ca.crt, client.crt, client.key locally
+  └─ Configures kubectl context named kube-formation pointing at controlplane1's public IP
 ```
 
-Generated files (all gitignored): `inventory.ini`, `private_key`, `known_hosts`, `kubeconfig`, `terraform.tfstate*`.
+Generated files (all gitignored): `inventory.ini`, `private_key`, `known_hosts`, `ca.crt`, `client.crt`, `client.key`, `terraform.tfstate*`.
 
 ## Ignored directories
 

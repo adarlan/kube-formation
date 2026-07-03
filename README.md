@@ -4,46 +4,17 @@ A project designed to practice and understand the [Kubernetes](https://kubernete
 
 The default topology is one control plane node and one worker node, both ARM64 `t4g.small` instances running Ubuntu 22.04. Instances auto-shutdown after 3 hours as a cost safeguard.
 
-## Requirements
-
-- [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)
-- [Terraform](https://developer.hashicorp.com/terraform/install)
-- [Ansible](https://docs.ansible.com/ansible/latest/installation_guide/intro_installation.html)
-- [kubectl](https://kubernetes.io/docs/tasks/tools/)
-- [jq](https://jqlang.org/download/)
-
-<!-- ## Configure AWS credentials
-
-Copy `.env` and fill in your credentials:
-
-```shell
-cp .env .env.local  # or edit .env directly (it is gitignored)
-```
-
-```shell
-export KUBECONFIG="kubeconfig"
-export AWS_REGION="us-east-1"
-export AWS_ACCESS_KEY_ID="..."
-export AWS_SECRET_ACCESS_KEY="..."
-```
-
-Then source it before running any command:
-
-```shell
-source .env
-``` -->
-
 ## Setup
 
 ```shell
-./setup.sh
+make setup
 ```
 
 This will:
-1. Initialize and apply Terraform — provisions EC2 instances, security groups, and an SSH key pair
+1. Initialize and apply Terraform — provisions EC2 instances, EIPs, and security groups
 2. Configure local SSH access — extracts the private key, scans known hosts, and generates the Ansible inventory
 3. Prepare the nodes — installs containerd, kubeadm, kubelet, and kubectl on all nodes
-4. Create the cluster — runs `kubeadm init` on the control plane, joins the worker nodes, and installs the Flannel CNI plugin
+4. Create the cluster — runs `kubeadm init` on the control plane, joins the worker nodes, and installs a CNI plugin
 5. Configure kubectl — extracts credentials from the control plane and updates local kubeconfig
 
 Verify the cluster is up:
@@ -54,25 +25,28 @@ kubectl get nodes
 
 ## Pause & Resume
 
-Stop the instances when you are no longer using the cluster to avoid compute charges. Note that EBS volumes are still charged while instances are stopped.
+Stop the instances when you are no longer using the cluster to avoid compute charges.
 
 ```shell
-./pause.sh
+make stop
 ```
 
 ```shell
-./resume.sh
+make start
 ```
 
-When resuming, the instances receive new public IPs, so the cluster is reset and recreated automatically.
+Elastic IPs keep node addresses stable across stop/start, so the cluster comes back up on its own.
+
+> Note: After you stop the instances, you are no longer charged usage or data transfer fees for it.
+> However, you will still be billed for associated Elastic IP addresses and EBS volumes.
 
 ## Connecting to nodes
 
 SSH into a node directly:
 
 ```shell
-./ssh-into.sh controlplane1
-./ssh-into.sh worker1
+make ssh-into NODE=controlplane1
+make ssh-into NODE=worker1
 ```
 
 ## Deploy a sample app
@@ -88,16 +62,8 @@ Access it at `http://<worker-public-ip>:30000`.
 ## Destroy
 
 ```shell
-./destroy.sh
+make destroy
 ```
-
-<!-- ## Troubleshooting
-
-Debug kubelet issues on a node:
-
-```shell
-sudo journalctl -u kubelet
-``` -->
 
 ## Contributing
 
