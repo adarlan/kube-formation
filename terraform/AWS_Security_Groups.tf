@@ -3,26 +3,26 @@ locals {
     node-firewall = {
       description = "Firewall rules for every node in the cluster"
       ingress_rules = {
-        kubelet = { network_scope = "node-firewall", port_range = [10250], description = "Allow kubelet API access from within the cluster" }
-        ssh     = { network_scope = "any", port_range = [22], description = "Allow SSH access from any source" }
+        kubelet = { network_scope = "control-plane-firewall", port_range = [10250], description = "Allow kubelet API access from control-plane nodes" }
+        ssh     = { network_scope = "public", port_range = [22], description = "Allow SSH access from any source" }
       }
       egress_rules = {
-        internet = { network_scope = "any", description = "Allow all outbound traffic to any destination" }
+        internet = { network_scope = "public", description = "Allow all outbound traffic to any destination" }
       }
     }
     control-plane-firewall = {
       description = "Firewall rules for control-plane nodes"
       ingress_rules = {
-        api-server         = { network_scope = "any", port_range = [6443], description = "Allow Kubernetes API server access from any source" }
-        etcd               = { network_scope = "node-firewall", port_range = [2379, 2380], description = "Allow etcd client and peer communication within the cluster" }
-        scheduler          = { network_scope = "node-firewall", port_range = [10251], description = "Allow kube-scheduler health checks within the cluster" }
-        controller-manager = { network_scope = "node-firewall", port_range = [10252], description = "Allow kube-controller-manager health checks within the cluster" }
+        api-server         = { network_scope = "public", port_range = [6443], description = "Allow Kubernetes API server access from any source" }
+        etcd               = { network_scope = "control-plane-firewall", port_range = [2379, 2380], description = "Allow etcd client and peer communication between control-plane nodes" }
+        scheduler          = { network_scope = "control-plane-firewall", port_range = [10251], description = "Allow kube-scheduler health checks between control-plane nodes" }
+        controller-manager = { network_scope = "control-plane-firewall", port_range = [10252], description = "Allow kube-controller-manager health checks between control-plane nodes" }
       }
     }
     worker-firewall = {
       description = "Firewall rules for worker nodes"
       ingress_rules = {
-        services = { network_scope = "any", port_range = [30000, 32767], description = "Allow NodePort service traffic from any source" }
+        services = { network_scope = "public", port_range = [30000, 32767], description = "Allow NodePort service traffic from any source" }
       }
     }
   }
@@ -47,8 +47,8 @@ resource "aws_vpc_security_group_ingress_rule" "this" {
   description       = each.value.description
   security_group_id = aws_security_group.this[each.value.sg_key].id
 
-  cidr_ipv4                    = each.value.network_scope == "any" ? "0.0.0.0/0" : null
-  referenced_security_group_id = each.value.network_scope != "any" ? aws_security_group.this[each.value.network_scope].id : null
+  cidr_ipv4                    = each.value.network_scope == "public" ? "0.0.0.0/0" : null
+  referenced_security_group_id = each.value.network_scope != "public" ? aws_security_group.this[each.value.network_scope].id : null
 
   ip_protocol = try(each.value.ip_protocol, "tcp")
   from_port   = each.value.port_range[0]
@@ -69,8 +69,8 @@ resource "aws_vpc_security_group_egress_rule" "this" {
   description       = each.value.description
   security_group_id = aws_security_group.this[each.value.sg_key].id
 
-  cidr_ipv4                    = each.value.network_scope == "any" ? "0.0.0.0/0" : null
-  referenced_security_group_id = each.value.network_scope != "any" ? aws_security_group.this[each.value.network_scope].id : null
+  cidr_ipv4                    = each.value.network_scope == "public" ? "0.0.0.0/0" : null
+  referenced_security_group_id = each.value.network_scope != "public" ? aws_security_group.this[each.value.network_scope].id : null
 
   ip_protocol = try(each.value.ip_protocol, -1)
 
