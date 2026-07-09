@@ -16,30 +16,30 @@ ssh-keys:
 tfvars:
 	{
 		echo "ssh_authorized_key = \"$$(cat id_ed25519.pub)\""
-	} > terraform.tfvars
+	} > terraform/terraform.tfvars
 
 apply:
-	terraform init
-	terraform apply
+	terraform -chdir=terraform init
+	terraform -chdir=terraform apply
 
 destroy:
-	terraform init
-	terraform destroy
+	terraform -chdir=terraform init
+	terraform -chdir=terraform destroy
 
 start:
-	nodes="$$(terraform output -json nodes)"
+	nodes="$$(terraform -chdir=terraform output -json nodes)"
 	for id in $$(echo "$$nodes" | jq -r '.[] | .instance_id'); do
 		aws ec2 start-instances --instance-ids $$id
 	done
 
 stop:
-	nodes="$$(terraform output -json nodes)"
+	nodes="$$(terraform -chdir=terraform output -json nodes)"
 	for id in $$(echo "$$nodes" | jq -r '.[] | .instance_id'); do
 		aws ec2 stop-instances --instance-ids $$id
 	done
 
 known-hosts:
-	nodes="$$(terraform output -json nodes)"
+	nodes="$$(terraform -chdir=terraform output -json nodes)"
 	: > known_hosts
 	for ip in $$(echo "$$nodes" | jq -r '.[] | .public_ip'); do
 		echo "- $$ip"
@@ -48,7 +48,8 @@ known-hosts:
 	chmod 644 known_hosts
 
 inventory:
-	nodes="$$(terraform output -json nodes)"
+	nodes="$$(terraform -chdir=terraform output -json nodes)"
+
 	control_plane_nodes="$$(echo "$$nodes" | jq 'with_entries(select(.value.role == "control-plane"))')"
 	worker_nodes="$$(echo "$$nodes" | jq 'with_entries(select(.value.role == "worker"))')"
 
@@ -69,15 +70,17 @@ inventory:
 		echo "[k8s:vars]"
 		echo "ansible_user=ubuntu"
 		echo "ansible_python_interpreter=/usr/bin/python3"
-	} > ansible-inventory.ini
+	} > ansible/ansible-inventory.ini
 
+	cd ansible
 	ansible k8s -m ping
 
 init-cluster:
+	cd ansible
 	ansible-playbook Initialize_Cluster.yaml
 
 kubeconfig:
-	controlplane1_ip="$$(terraform output -json nodes | jq -r '.controlplane1.public_ip')"
+	controlplane1_ip="$$(terraform -chdir=terraform output -json nodes | jq -r '.controlplane1.public_ip')"
 
 	admin_conf="$$(
 		ssh \
@@ -105,5 +108,5 @@ ssh-into:
 		echo "Usage: make ssh-into NODE=<node-name>" >&2
 		exit 1
 	fi
-	node_ip="$$(terraform output -json nodes | jq -r --arg node "$$node" '.[$$node].public_ip')"
+	node_ip="$$(terraform -chdir=terraform output -json nodes | jq -r --arg node "$$node" '.[$$node].public_ip')"
 	ssh -i id_ed25519 -o UserKnownHostsFile=known_hosts ubuntu@"$$node_ip"
