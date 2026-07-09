@@ -77,7 +77,7 @@ inventory:
 
 init-cluster:
 	cd ansible
-	ansible-playbook Initialize_Cluster.yaml
+	ansible-playbook initialize_cluster.yaml
 
 kubeconfig:
 	controlplane1_ip="$$(terraform -chdir=terraform output -json nodes | jq -r '.controlplane1.public_ip')"
