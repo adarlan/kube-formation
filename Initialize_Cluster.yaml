@@ -1,0 +1,61 @@
+---
+- name: Primary control plane node
+  hosts: bootstrap_control_plane
+  become: true
+  tasks:
+    - name: Initialize control plane
+      command: >
+        kubeadm init
+        --node-name {{ inventory_hostname }}
+        --pod-network-cidr=10.244.0.0/16
+        --apiserver-cert-extra-sans={{ ansible_host }}
+        --control-plane-endpoint={{ ansible_host }}:6443
+      args:
+        creates: /etc/kubernetes/admin.conf
+
+    - name: Create bootstrap token
+      command: kubeadm token create --print-join-command
+      register: join_command
+
+    - name: Store join command
+      set_fact:
+        join_command: "{{ join_command.stdout }}"
+
+    - name: Upload control plane certificates
+      command: kubeadm init phase upload-certs --upload-certs
+      register: upload_certs
+
+    - name: Store certificate key
+      set_fact:
+        certificate_key: "{{ upload_certs.stdout_lines[-1] }}"
+
+    - name: Install CNI plugin
+      command: kubectl apply -f https://github.com/flannel-io/flannel/releases/download/v0.28.5/kube-flannel.yml
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      register: flannel_apply
+      changed_when: "'created' in flannel_apply.stdout or 'configured' in flannel_apply.stdout"
+
+- name: Secondary control plane nodes
+  hosts: control_plane:!bootstrap_control_plane
+  become: true
+  tasks:
+    - name: Join control plane
+      command: >-
+        {{ hostvars[groups['bootstrap_control_plane'][0]].join_command }}
+        --control-plane
+        --certificate-key {{ hostvars[groups['bootstrap_control_plane'][0]].certificate_key }}
+        --node-name {{ inventory_hostname }}
+      args:
+        creates: /etc/kubernetes/kubelet.conf
+
+- name: Worker nodes
+  hosts: workers
+  become: true
+  tasks:
+    - name: Join worker
+      command: >-
+        {{ hostvars[groups['bootstrap_control_plane'][0]].join_command }}
+        --node-name {{ inventory_hostname }}
+      args:
+        creates: /etc/kubernetes/kubelet.conf

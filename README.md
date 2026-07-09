@@ -1,8 +1,6 @@
 # Kube Formation
 
-A project designed to practice and understand the [Kubernetes](https://kubernetes.io/) architecture by setting up a cluster on [Amazon EC2](https://aws.amazon.com/ec2/) instances. Terraform provisions the infrastructure and Ansible bootstraps the cluster.
-
-The default topology is one control plane node and one worker node, both ARM64 `t4g.small` instances running Ubuntu 22.04. Instances auto-shutdown after 3 hours as a cost safeguard.
+A project designed to practice and understand the [Kubernetes](https://kubernetes.io/) architecture by setting up a cluster on [Amazon EC2](https://aws.amazon.com/ec2/) instances. Terraform provisions the infrastructure and Ansible initializes the cluster.
 
 ## Setup
 
