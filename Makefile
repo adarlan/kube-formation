@@ -2,9 +2,9 @@ SHELL := /bin/bash
 .ONESHELL:
 .SHELLFLAGS := -eu -o pipefail -c
 
-.PHONY: setup ssh-keys tfvars apply start stop known-hosts inventory init-cluster kubeconfig destroy ssh-into
+.PHONY: setup ssh-keys tfvars apply start stop known-hosts inventory ansible-ping init-cluster kubeconfig destroy ssh-into
 
-setup: ssh-keys tfvars apply start known-hosts inventory init-cluster kubeconfig
+setup: ssh-keys tfvars apply known-hosts inventory ansible-ping init-cluster kubeconfig
 
 ssh-keys:
 	if [ ! -f id_ed25519 ] || [ ! -f id_ed25519.pub ]; then
@@ -21,37 +21,33 @@ tfvars:
 apply:
 	terraform -chdir=terraform init
 	terraform -chdir=terraform apply
+	terraform -chdir=terraform output -json nodes | jq > nodes.json
 
 destroy:
 	terraform -chdir=terraform init
 	terraform -chdir=terraform destroy
 
 start:
-	nodes="$$(terraform -chdir=terraform output -json nodes)"
-	for id in $$(echo "$$nodes" | jq -r '.[] | .instance_id'); do
+	for id in $$(cat nodes.json | jq -r '.[] | .instance_id'); do
 		aws ec2 start-instances --instance-ids $$id
 	done
 
 stop:
-	nodes="$$(terraform -chdir=terraform output -json nodes)"
-	for id in $$(echo "$$nodes" | jq -r '.[] | .instance_id'); do
+	for id in $$(cat nodes.json | jq -r '.[] | .instance_id'); do
 		aws ec2 stop-instances --instance-ids $$id
 	done
 
 known-hosts:
-	nodes="$$(terraform -chdir=terraform output -json nodes)"
 	: > known_hosts
-	for ip in $$(echo "$$nodes" | jq -r '.[] | .public_ip'); do
+	for ip in $$(cat nodes.json | jq -r '.[] | .public_ip'); do
 		echo "- $$ip"
 		ssh-keyscan $$ip >> known_hosts
 	done
 	chmod 644 known_hosts
 
 inventory:
-	nodes="$$(terraform -chdir=terraform output -json nodes)"
-
-	control_plane_nodes="$$(echo "$$nodes" | jq 'with_entries(select(.value.role == "control-plane"))')"
-	worker_nodes="$$(echo "$$nodes" | jq 'with_entries(select(.value.role == "worker"))')"
+	control_plane_nodes="$$(cat nodes.json | jq 'with_entries(select(.value.role == "control-plane"))')"
+	worker_nodes="$$(cat nodes.json | jq 'with_entries(select(.value.role == "worker"))')"
 
 	{
 		echo "[bootstrap_control_plane]"
@@ -72,6 +68,7 @@ inventory:
 		echo "ansible_python_interpreter=/usr/bin/python3"
 	} > ansible/ansible-inventory.ini
 
+ansible-ping:
 	cd ansible
 	ansible k8s -m ping
 
@@ -80,7 +77,7 @@ init-cluster:
 	ansible-playbook initialize_cluster.yaml
 
 kubeconfig:
-	controlplane1_ip="$$(terraform -chdir=terraform output -json nodes | jq -r '.controlplane1.public_ip')"
+	controlplane1_ip="$$(cat nodes.json | jq -r '.controlplane1.public_ip')"
 
 	admin_conf="$$(
 		ssh \
@@ -108,5 +105,15 @@ ssh-into:
 		echo "Usage: make ssh-into NODE=<node-name>" >&2
 		exit 1
 	fi
-	node_ip="$$(terraform -chdir=terraform output -json nodes | jq -r --arg node "$$node" '.[$$node].public_ip')"
+	node_ip="$$(cat nodes.json | jq -r --arg node "$$node" '.[$$node].public_ip')"
 	ssh -i id_ed25519 -o UserKnownHostsFile=known_hosts ubuntu@"$$node_ip"
+
+ssh-cmd:
+	node="$(NODE)"
+	cmd="$(CMD)"
+	if [ -z "$$node" ] || [ -z "$$cmd" ]; then
+		echo "Usage: make ssh-into NODE=<node-name> CMD=<command>" >&2
+		exit 1
+	fi
+	node_ip="$$(cat nodes.json | jq -r --arg node "$$node" '.[$$node].public_ip')"
+	ssh -i id_ed25519 -o UserKnownHostsFile=known_hosts ubuntu@"$$node_ip" "$$cmd"

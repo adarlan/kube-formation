@@ -12,6 +12,8 @@ tfstate.*
 .terraform.*
 terraform.tfvars
 
+nodes.json
+
 ansible-inventory.ini
 
 kubeconfig
