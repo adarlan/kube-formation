@@ -3,26 +3,63 @@ locals {
     node-firewall = {
       description = "Firewall rules for every node in the cluster"
       ingress_rules = {
-        kubelet = { network_scope = "control-plane-firewall", port_range = [10250], description = "Allow kubelet API access from control-plane nodes" }
-        ssh     = { network_scope = "public", port_range = [22], description = "Allow SSH access from any source" }
+        kubelet = {
+          description   = "Allow kubelet API access from control-plane nodes"
+          network_scope = "control-plane-firewall"
+          port_range    = [10250]
+        }
+        ssh = {
+          description   = "Allow SSH access from any source"
+          network_scope = "public"
+          port_range    = [22]
+        }
+        flannel-vxlan = {
+          description   = "Allow flannel VXLAN overlay traffic between nodes"
+          network_scope = "node-firewall"
+          port_range    = [8472]
+          ip_protocol   = "udp"
+        }
       }
       egress_rules = {
-        internet = { network_scope = "public", description = "Allow all outbound traffic to any destination" }
+        internet = {
+          description   = "Allow all outbound traffic to any destination"
+          network_scope = "public"
+        }
       }
     }
     control-plane-firewall = {
       description = "Firewall rules for control-plane nodes"
       ingress_rules = {
-        api-server         = { network_scope = "public", port_range = [6443], description = "Allow Kubernetes API server access from any source" }
-        etcd               = { network_scope = "control-plane-firewall", port_range = [2379, 2380], description = "Allow etcd client and peer communication between control-plane nodes" }
-        scheduler          = { network_scope = "control-plane-firewall", port_range = [10251], description = "Allow kube-scheduler health checks between control-plane nodes" }
-        controller-manager = { network_scope = "control-plane-firewall", port_range = [10252], description = "Allow kube-controller-manager health checks between control-plane nodes" }
+        api-server = {
+          description   = "Allow Kubernetes API server access from any source"
+          network_scope = "public"
+          port_range    = [6443]
+        }
+        etcd = {
+          description   = "Allow etcd client and peer communication between control-plane nodes"
+          network_scope = "control-plane-firewall"
+          port_range    = [2379, 2380]
+        }
+        scheduler = {
+          description   = "Allow kube-scheduler health checks between control-plane nodes"
+          network_scope = "control-plane-firewall"
+          port_range    = [10251]
+        }
+        controller-manager = {
+          description   = "Allow kube-controller-manager health checks between control-plane nodes"
+          network_scope = "control-plane-firewall"
+          port_range    = [10252]
+        }
       }
     }
     worker-firewall = {
       description = "Firewall rules for worker nodes"
       ingress_rules = {
-        services = { network_scope = "public", port_range = [30000, 32767], description = "Allow NodePort service traffic from any source" }
+        services = {
+          description   = "Allow NodePort service traffic from any source"
+          network_scope = "public"
+          port_range    = [30000, 32767]
+        }
       }
     }
   }
