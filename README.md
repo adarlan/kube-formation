@@ -9,11 +9,10 @@ make setup
 ```
 
 This will:
-1. Initialize and apply Terraform — provisions EC2 instances, EIPs, and security groups
-2. Configure local SSH access — extracts the private key, scans known hosts, and generates the Ansible inventory
-3. Prepare the nodes — installs containerd, kubeadm, kubelet, and kubectl on all nodes
-4. Create the cluster — runs `kubeadm init` on the control plane, joins the worker nodes, and installs a CNI plugin
-5. Configure kubectl — extracts credentials from the control plane and updates local kubeconfig
+1. Initialize and apply Terraform — provisions EC2 instances, EIPs, security groups, and SSH key pair
+2. Configure SSH access — extracts the private key, scans known hosts, and generates the Ansible inventory
+3. Create the cluster — runs `kubeadm init` on the control plane, joins the worker nodes, and installs a CNI plugin
+4. Configure kubectl — extracts credentials from the control plane and updates local kubeconfig
 
 Verify the cluster is up:
 
@@ -49,13 +48,15 @@ make ssh-into NODE=worker1
 
 ## Deploy a sample app
 
-`manifest.yaml` deploys an nginx `Deployment` with 10 replicas and exposes it via a `NodePort` on port 30000:
+Worker nodes accept inbound traffic on the NodePort range (30000-32767), so a `NodePort` service is
+reachable at `http://<worker-public-ip>:<node-port>` once deployed, e.g.:
 
 ```shell
-kubectl apply -f manifest.yaml
+kubectl create deployment nginx --image=nginx
+kubectl expose deployment nginx --type=NodePort --port=80
 ```
 
-Access it at `http://<worker-public-ip>:30000`.
+> More exercises: [lab](./lab/)
 
 ## Destroy
 
