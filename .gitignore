@@ -1,21 +1,15 @@
-.env
-
-id_ed25519
-id_ed25519.pub
-known_hosts
-
 tfstate
 tfstate.*
 *.tfstate
 *.tfstate.*
 .terraform
 .terraform.*
-terraform.tfvars
+terraform.tfvars.json
 
-nodes.json
+private_key
+known_hosts
+inventory.ini
 
-ansible-inventory.ini
-
-kubeconfig
 *.crt
 *.key
+*.csr
