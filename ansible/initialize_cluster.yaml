@@ -1,6 +1,6 @@
 ---
 - name: Primary control plane node
-  hosts: bootstrap_control_plane
+  hosts: primary_control_plane_node
   become: true
   tasks:
     - name: Initialize control plane
@@ -37,25 +37,25 @@
       changed_when: "'created' in flannel_apply.stdout or 'configured' in flannel_apply.stdout"
 
 - name: Secondary control plane nodes
-  hosts: control_plane:!bootstrap_control_plane
+  hosts: control_plane_nodes:!primary_control_plane_node
   become: true
   tasks:
     - name: Join control plane
       command: >-
-        {{ hostvars[groups['bootstrap_control_plane'][0]].join_command }}
+        {{ hostvars[groups['primary_control_plane_node'][0]].join_command }}
         --control-plane
-        --certificate-key {{ hostvars[groups['bootstrap_control_plane'][0]].certificate_key }}
+        --certificate-key {{ hostvars[groups['primary_control_plane_node'][0]].certificate_key }}
         --node-name {{ inventory_hostname }}
       args:
         creates: /etc/kubernetes/kubelet.conf
 
 - name: Worker nodes
-  hosts: workers
+  hosts: worker_nodes
   become: true
   tasks:
     - name: Join worker
       command: >-
-        {{ hostvars[groups['bootstrap_control_plane'][0]].join_command }}
+        {{ hostvars[groups['primary_control_plane_node'][0]].join_command }}
         --node-name {{ inventory_hostname }}
       args:
         creates: /etc/kubernetes/kubelet.conf
