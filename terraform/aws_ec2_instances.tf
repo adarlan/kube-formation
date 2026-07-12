@@ -1,10 +1,7 @@
 locals {
-  control_plane_count = 1
-  worker_count        = 1
-
   nodes = merge(
-    { for i in range(local.control_plane_count) : "controlplane${i + 1}" => { role = "control-plane" } },
-    { for i in range(local.worker_count) : "worker${i + 1}" => { role = "worker" } },
+    { for i in range(var.control_plane_node_count) : "controlplane${i + 1}" => { role = "control-plane" } },
+    { for i in range(var.worker_node_count) : "worker${i + 1}" => { role = "worker" } },
   )
 
   ec2_instance_type = "t4g.small"
@@ -35,6 +32,8 @@ resource "aws_instance" "this" {
   ami           = data.aws_ami.this.id
   instance_type = local.ec2_instance_type
 
+  key_name = aws_key_pair.this.key_name
+
   vpc_security_group_ids = {
     "control-plane" = [
       aws_security_group.this["node-firewall"].id,
@@ -50,9 +49,6 @@ resource "aws_instance" "this" {
     #cloud-config
 
     hostname: ${each.key}
-
-    ssh_authorized_keys:
-      - ${var.ssh_authorized_key}
 
     runcmd:
       # Disable swap
