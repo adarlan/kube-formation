@@ -13,3 +13,6 @@ inventory.ini
 *.crt
 *.key
 *.csr
+
+*.Dockerfile
+TODO
