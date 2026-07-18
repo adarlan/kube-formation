@@ -4,15 +4,18 @@ tfstate.*
 *.tfstate.*
 .terraform
 .terraform.*
-terraform.tfvars.json
+terraform/*.json
 
 private_key
 known_hosts
-inventory.ini
 
 *.crt
 *.key
 *.csr
-
 *.Dockerfile
 TODO
+
+primary_control_plane_public_ip
+
+.env
+kubeconfig
