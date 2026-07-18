@@ -1,64 +1,82 @@
 locals {
   security_groups = {
-    node-firewall = {
+    cluster = {
       description = "Firewall rules for every node in the cluster"
+
       ingress_rules = {
         kubelet = {
-          description   = "Allow kubelet API access from control-plane nodes"
-          network_scope = "control-plane-firewall"
+          network_scope = "control-plane"
           port_range    = [10250]
+          ip_protocol   = "tcp"
+          description   = "Allow kubelet API access from control-plane nodes"
         }
+
         ssh = {
-          description   = "Allow SSH access from any source"
           network_scope = "public"
           port_range    = [22]
+          ip_protocol   = "tcp"
+          description   = "Allow SSH access from any source"
         }
+
         flannel-vxlan = {
-          description   = "Allow flannel VXLAN overlay traffic between nodes"
-          network_scope = "node-firewall"
+          network_scope = "cluster"
           port_range    = [8472]
           ip_protocol   = "udp"
+          description   = "Allow flannel VXLAN overlay traffic between nodes"
         }
       }
+
       egress_rules = {
-        internet = {
+        internet-access = {
           description   = "Allow all outbound traffic to any destination"
           network_scope = "public"
         }
       }
     }
-    control-plane-firewall = {
+
+    control-plane = {
       description = "Firewall rules for control-plane nodes"
+
       ingress_rules = {
         api-server = {
-          description   = "Allow Kubernetes API server access from any source"
           network_scope = "public"
           port_range    = [6443]
+          ip_protocol   = "tcp"
+          description   = "Allow Kubernetes API server access from any source"
         }
+
         etcd = {
-          description   = "Allow etcd client and peer communication between control-plane nodes"
-          network_scope = "control-plane-firewall"
+          network_scope = "control-plane"
           port_range    = [2379, 2380]
+          ip_protocol   = "tcp"
+          description   = "Allow etcd client and peer communication between control-plane nodes"
         }
-        scheduler = {
-          description   = "Allow kube-scheduler health checks between control-plane nodes"
-          network_scope = "control-plane-firewall"
+
+        kube-scheduler = {
+          network_scope = "control-plane"
           port_range    = [10251]
+          ip_protocol   = "tcp"
+          description   = "Allow kube-scheduler health checks between control-plane nodes"
         }
-        controller-manager = {
-          description   = "Allow kube-controller-manager health checks between control-plane nodes"
-          network_scope = "control-plane-firewall"
+
+        kube-controller-manager = {
+          network_scope = "control-plane"
           port_range    = [10252]
+          ip_protocol   = "tcp"
+          description   = "Allow kube-controller-manager health checks between control-plane nodes"
         }
       }
     }
-    worker-firewall = {
+
+    worker = {
       description = "Firewall rules for worker nodes"
+
       ingress_rules = {
-        services = {
-          description   = "Allow NodePort service traffic from any source"
+        node-port-services = {
           network_scope = "public"
           port_range    = [30000, 32767]
+          ip_protocol   = "tcp"
+          description   = "Allow NodePort service traffic from any source"
         }
       }
     }
@@ -68,7 +86,7 @@ locals {
 resource "aws_security_group" "this" {
   for_each = local.security_groups
 
-  name        = "kube-formation-${each.key}"
+  name        = format("kubeadm-lab-%s", each.key)
   description = each.value.description
 }
 
@@ -88,10 +106,13 @@ resource "aws_vpc_security_group_ingress_rule" "this" {
   referenced_security_group_id = each.value.network_scope != "public" ? aws_security_group.this[each.value.network_scope].id : null
 
   ip_protocol = try(each.value.ip_protocol, "tcp")
-  from_port   = each.value.port_range[0]
-  to_port     = each.value.port_range[length(each.value.port_range) - 1]
 
-  tags = { Name = each.value.rule_key }
+  from_port = each.value.port_range[0]
+  to_port   = each.value.port_range[length(each.value.port_range) - 1]
+
+  tags = {
+    Name = each.value.rule_key
+  }
 }
 
 resource "aws_vpc_security_group_egress_rule" "this" {
@@ -109,7 +130,9 @@ resource "aws_vpc_security_group_egress_rule" "this" {
   cidr_ipv4                    = each.value.network_scope == "public" ? "0.0.0.0/0" : null
   referenced_security_group_id = each.value.network_scope != "public" ? aws_security_group.this[each.value.network_scope].id : null
 
-  ip_protocol = try(each.value.ip_protocol, -1)
+  ip_protocol = -1
 
-  tags = { Name = each.value.rule_key }
+  tags = {
+    Name = each.value.rule_key
+  }
 }

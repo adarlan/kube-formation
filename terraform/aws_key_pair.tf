@@ -3,6 +3,6 @@ resource "tls_private_key" "this" {
 }
 
 resource "aws_key_pair" "this" {
-  key_name   = "kube-formation"
+  key_name   = "kubeadm-lab"
   public_key = tls_private_key.this.public_key_openssh
 }

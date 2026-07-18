@@ -1,11 +1,29 @@
-output "nodes" {
+output "instance_ids" {
   value = {
-    for node_key, node_value in local.nodes : node_key => {
-      role        = node_value.role
-      public_ip   = aws_eip.this[node_key].public_ip
-      instance_id = aws_instance.this[node_key].id
-    }
+    for key in keys(var.instances) : key => aws_instance.this[key].id
   }
+}
+
+output "public_ips" {
+  value = {
+    for key in keys(var.instances) : key => aws_instance.this[key].public_ip
+  }
+}
+
+output "control_plane_public_ips" {
+  value = [
+    for key, value in var.instances :
+    aws_instance.this[key].public_ip
+    if value.node_role == "control-plane"
+  ]
+}
+
+output "worker_public_ips" {
+  value = [
+    for key, value in var.instances :
+    aws_instance.this[key].public_ip
+    if value.node_role == "worker"
+  ]
 }
 
 output "private_key" {

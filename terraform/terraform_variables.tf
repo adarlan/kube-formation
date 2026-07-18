@@ -1,9 +1,8 @@
-variable "control_plane_node_count" {
-  type    = number
-  default = 1
-}
+variable "instances" {
 
-variable "worker_node_count" {
-  type    = number
-  default = 1
+  type = map(object({
+    node_role = string
+  }))
+
+  default = {}
 }
