@@ -1,3 +1,7 @@
+Let's experiment with pods.
+
+> Note: Creating standalone pods (pods that are not managed by a controller such as a deployment or statefulset) is generally not recommended. If the node hosting such a pod is drained, deleted, or fails permanently, the pod will be removed and will not be recreated on another node because no controller exists to manage its lifecycle.
+
 # pod1
 
 ## Run nginx Pod
@@ -65,3 +69,11 @@ kubectl patch pod/pod3 -p '{"spec":{"containers":[{"name":"pod3","image":"busybo
 ```
 kubectl edit pod/pod3
 ```
+
+# TODO
+
+try managed pods, that is, pods managed by replicaset, deployment, daemonset (job, cronjob?)
+the idea is to show what happens when you update the image in those cases
+for example, replicased will not do nothing until ou scale or delete some pods
+deployment will do a rollout
+etc

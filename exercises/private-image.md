@@ -51,7 +51,7 @@ On Docker Hub:
 
 Account Settings → Personal access tokens
 Create a token with Read access.
-Suggested description: kube-formation
+Suggested description: kubeadm-lab
 Access permissions: Read-only
 
 Use your Docker Hub username and the token (not your password).
