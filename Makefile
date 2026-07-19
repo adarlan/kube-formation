@@ -88,7 +88,7 @@ define validate_role
 	role="$(1)"
 	if [[ "$$role" != "worker" && "$$role" != "control-plane" ]]; then
 		echo "❌ Invalid role: $$role" >&2
-		echo "Usage: make $@ [worker|control-plane]" >&2
+		echo "Usage: make $@ ROLE=[worker|control-plane] NAME=<name>" >&2
 		exit 1
 	fi
 endef
