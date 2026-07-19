@@ -3,8 +3,7 @@ resource "aws_instance" "this" {
 
   instance_type = "t4g.small"
 
-  ami      = data.aws_ami.this.id
-  key_name = aws_key_pair.this.key_name
+  ami = data.aws_ami.this.id
 
   vpc_security_group_ids = [
     aws_security_group.this["cluster"].id,
@@ -14,6 +13,8 @@ resource "aws_instance" "this" {
   user_data = <<-EOF
     #cloud-config
     hostname: ${each.key}
+    ssh_authorized_keys:
+    - ${tls_private_key.this.public_key_openssh}
   EOF
 
   tags = {
