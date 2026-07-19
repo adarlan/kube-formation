@@ -28,7 +28,7 @@ Resize the cluster to have 2 worker nodes:
 
 ```shell
 # Resize cluster
-make setup W=2
+make add-node NAME=worker2
 
 # View nodes
 kubectl get nodes
@@ -52,8 +52,8 @@ kubectl get pods -l app=app6 -owide
 What if a node crashes suddenly?
 
 ```shell
-# Stop worker2 EC2 instance to simulate a node crash
-make stop NODE=worker2
+# Stop worker2 instance to simulate a node crash
+make stop-instance NAME=worker2
 
 # After missing heartbeats for a while, the Node Controller marks worker2 as "NotReady"
 kubectl get node worker2
@@ -86,7 +86,7 @@ kubectl run curl --image=curlimages/curl -it --rm -- curl http://app6
 Bring back `worker2` and restart `app6` to redistribute pods across both nodes:
 
 ```shell
-make start NODE=worker2
+make start-instance NAME=worker2
 
 kubectl rollout restart deployment app6 \
 && kubectl rollout status deployment app6
@@ -113,7 +113,7 @@ kubectl get pods -A --field-selector spec.nodeName=worker2
 # Delete node
 kubectl delete node worker2
 
-make stop NODE=worker2
+make terminate-instance NAME=worker2
 ```
 
 ## Try it yourself

@@ -30,7 +30,7 @@ kubectl expose deployment app1 --type=NodePort --port=80 --target-port=80
 
 # NodePort is allocated from the cluster's node port range (default 30000-32767)
 node_port="$(kubectl get service app1 -o jsonpath='{.spec.ports[0].nodePort}')"
-worker_public_ip="$(terraform -chdir=terraform output -json worker_public_ips | jq -r 'first')"
+worker_public_ip="$(terraform output -json worker_public_ips | jq -r 'first')"
 
 # Reach it from outside the cluster via any node's IP + the node port
 curl http://$worker_public_ip:$node_port
