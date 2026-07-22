@@ -5,10 +5,10 @@ locals {
 
       ingress_rules = {
         kubelet = {
-          network_scope = "control-plane"
+          network_scope = "cluster"
           port_range    = [10250]
           ip_protocol   = "tcp"
-          description   = "Allow kubelet API access from control-plane nodes"
+          description   = "Allow kubelet API access from any node in the cluster"
         }
 
         ssh = {

@@ -107,6 +107,11 @@ install-addons() {
         echo "[install-addons::$ADMIN_NODE] Installing Metrics Server..."; (
             set -x
             $kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/download/v0.9.0/components.yaml
+
+            # kubelet's self-signed serving certificate has no IP SANs, so metrics-server
+            # can't verify it; skip verification since this is a lab, not production.
+            $kubectl -n kube-system patch deployment metrics-server --type=json \
+                -p='[{"op": "add", "path": "/spec/template/spec/containers/0/args/-", "value": "--kubelet-insecure-tls"}]'
         )
 
         echo "[install-addons::$ADMIN_NODE] Installing Ingress Controller..."; (
