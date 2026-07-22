@@ -2,7 +2,13 @@
 
 A project designed to practice and understand the [Kubernetes](https://kubernetes.io/) architecture by setting up a cluster on [Amazon EC2](https://aws.amazon.com/ec2/) instances using [Kubeadm](https://kubernetes.io/docs/reference/setup-tools/kubeadm/).
 
-<!-- TODO requirements: aws account, aws cli, terraform, kubectl, make, jq, etc -->
+## 📋 Requirements
+
+- An AWS account, with credentials configured for the [AWS CLI](https://aws.amazon.com/cli/)
+- [Terraform](https://developer.hashicorp.com/terraform)
+- [kubectl](https://kubernetes.io/docs/tasks/tools/#kubectl)
+- [jq](https://jqlang.org/) and [yq](https://github.com/mikefarah/yq)
+- `make` and an SSH client (with `ssh-keyscan`)
 
 ## 🏗️ Setup cluster
 
@@ -12,11 +18,12 @@ make setup
 
 This will:
 
-1. Provision infrastructure – provision instances and security groups
-2. Configure SSH – generate key pair and discover host keys
-3. Prepare hosts – configure kernel and install Kubernetes packages
-4. Bootstrap cluster – initialize control-plane and join a worker node
-5. Update kubeconfig – pull admin credentials and update local kubeconfig
+1. Provision infrastructure – create the EC2 instances, security groups and key pair; scan host keys
+2. Prepare nodes – configure the kernel and install kubeadm-required packages on `controlplane1` and `worker1`
+3. Initialize control-plane – run `kubeadm init` on `controlplane1`
+4. Update kubeconfig – pull admin credentials and merge them into the local kubeconfig
+5. Install addons – CNI plugin, metrics-server and ingress controller
+6. Join worker – join `worker1` to the cluster
 
 Verify the cluster is up:
 
@@ -43,42 +50,82 @@ See [more examples](./exercises/).
 
 ## 📡 SSH into hosts
 
+SSH into hosts for troubleshooting.
+
 ```shell
-# SSH into hosts for troubleshooting
 make ssh-into NAME=controlplane1
-make ssh-into NAME=worker1
 ```
 
 ## 📈 Add nodes
 
+Provision new instances and join them as nodes into the cluster.
+
 ```shell
-# Provision new instances and join them into the cluster
-make add-node NAME=controlplane2 ROLE=control-plane
-make add-node NAME=worker2 ROLE=worker
-make add-node NAME=worker3
+make add-worker NAME=worker2
+```
+
+```shell
+make add-control-plane NAME=controlplane2
 ```
 
 ## 📉 Remove nodes
 
+Remove nodes from the cluster and terminate their corresponding instances.
+
 ```shell
-# Gracefuly remove nodes from the cluster and terminate their instances
 make remove-node NAME=controlplane2
-make remove-node NAME=worker2
 ```
 
 ## 💀 Simulate node crash
 
+**Temporary outage** – stop the instance without touching its cluster membership. The node becomes
+`NotReady` after missing heartbeats, then rejoins on its own once the instance is started again:
+
 ```shell
-# Kill a node without properly removing it from the cluster
-make terminate-instance NAME=worker3
+make stop-instance NAME=worker1
+```
+
+```shell
+make start-instance NAME=worker1
+```
+
+**Permanent failure** – terminate the instance without properly removing its node from the cluster:
+
+```shell
+make terminate-instance NAME=worker1
+```
+
+The node will become `NotReady` and stay that way, since the instance is gone for good. To clean it up, force-remove it:
+
+```shell
+make remove-node NAME=worker1 FORCE=true
+```
+
+## 🔑 Update kubeconfig
+
+Re-pull admin credentials and refresh the local kubeconfig, without redoing the rest of `make setup`:
+
+```shell
+make kubeconfig
 ```
 
 ## 💥 Destroy cluster
 
 ```shell
-# Destroy the cluster
 make destroy
 ```
+
+## ⚠️ Limitations
+
+This project favors simplicity and low cost over production-readiness.
+
+Known limitations:
+
+- **No load balancer in front of the control plane.** For simplicity, the cluster uses `controlplane1`'s public IP as its control-plane endpoint. Since this address is embedded in the API server certificate and every node's kubeconfig, `controlplane1` cannot be removed, terminated, or restarted without breaking access to the cluster, even if other control-plane nodes are still running.
+
+- **No cloud controller manager.** Since the cluster is not integrated with AWS, Kubernetes cannot provision cloud load balancers. Consequently, `Service` objects of type `LoadBalancer` remain in the pending state indefinitely. To expose workloads externally, use NodePort and connect directly to a node's public IP.
+
+- **Minimal networking.** Everything runs in the AWS account's default VPC/subnets. There's no custom VPC, no private subnets, no NAT gateway. Security groups allow inbound access from any source (`0.0.0.0/0`) to SSH (22) on all nodes, the API server (6443) on control-plane nodes, and the NodePort range (30000-32767) on worker nodes, which is convenient for a lab but far more permissive than you'd want in production.
 
 ## 🤝 Contributing
 

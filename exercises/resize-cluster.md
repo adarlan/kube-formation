@@ -28,7 +28,7 @@ Resize the cluster to have 2 worker nodes:
 
 ```shell
 # Resize cluster
-make add-node NAME=worker2
+make add-worker NAME=worker2
 
 # View nodes
 kubectl get nodes
