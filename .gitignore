@@ -6,8 +6,10 @@ tfstate.*
 .terraform.*
 terraform.tfvars.*
 
+inventory.json
 private_key
 known_hosts
+known_hosts.json
 
 *.crt
 *.key
