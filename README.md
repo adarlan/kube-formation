@@ -46,8 +46,6 @@ worker_public_ip="$(terraform output -json worker_public_ips | jq -r 'first')"
 curl http://$worker_public_ip:$node_port
 ```
 
-See [more examples](./exercises/).
-
 ## 📡 SSH into hosts
 
 SSH into hosts for troubleshooting.
@@ -70,7 +68,7 @@ make add-control-plane NAME=controlplane2
 
 ## 📉 Remove nodes
 
-Remove nodes from the cluster and terminate their corresponding instances.
+Gracefuly remove nodes from the cluster and terminate their corresponding instances.
 
 ```shell
 make remove-node NAME=controlplane2
@@ -78,35 +76,11 @@ make remove-node NAME=controlplane2
 
 ## 💀 Simulate node crash
 
-**Temporary outage** – stop the instance without touching its cluster membership. The node becomes
-`NotReady` after missing heartbeats, then rejoins on its own once the instance is started again:
+Terminate the instance without properly removing its node from the cluster.
+The node becomes `NotReady` after missing heartbeats.
 
 ```shell
-make stop-instance NAME=worker1
-```
-
-```shell
-make start-instance NAME=worker1
-```
-
-**Permanent failure** – terminate the instance without properly removing its node from the cluster:
-
-```shell
-make terminate-instance NAME=worker1
-```
-
-The node will become `NotReady` and stay that way, since the instance is gone for good. To clean it up, force-remove it:
-
-```shell
-make remove-node NAME=worker1 FORCE=true
-```
-
-## 🔑 Update kubeconfig
-
-Re-pull admin credentials and refresh the local kubeconfig, without redoing the rest of `make setup`:
-
-```shell
-make kubeconfig
+make destroy-instance NAME=worker1
 ```
 
 ## 💥 Destroy cluster
@@ -121,11 +95,11 @@ This project favors simplicity and low cost over production-readiness.
 
 Known limitations:
 
-- **No load balancer in front of the control plane.** For simplicity, the cluster uses `controlplane1`'s public IP as its control-plane endpoint. Since this address is embedded in the API server certificate and every node's kubeconfig, `controlplane1` cannot be removed, terminated, or restarted without breaking access to the cluster, even if other control-plane nodes are still running.
+- **No load balancer in front of the control plane.** For simplicity, the cluster uses `controlplane1`'s public IP as its control-plane endpoint. Since this address is embedded in the API server certificate and every node's kubeconfig, `controlplane1` cannot be removed or terminated without breaking access to the cluster, even if other control-plane nodes are still running.
 
 - **No cloud controller manager.** Since the cluster is not integrated with AWS, Kubernetes cannot provision cloud load balancers. Consequently, `Service` objects of type `LoadBalancer` remain in the pending state indefinitely. To expose workloads externally, use NodePort and connect directly to a node's public IP.
 
-- **Minimal networking.** Everything runs in the AWS account's default VPC/subnets. There's no custom VPC, no private subnets, no NAT gateway. Security groups allow inbound access from any source (`0.0.0.0/0`) to SSH (22) on all nodes, the API server (6443) on control-plane nodes, and the NodePort range (30000-32767) on worker nodes, which is convenient for a lab but far more permissive than you'd want in production.
+- **Minimal networking.** Everything runs in the AWS account's default VPC/subnets. There's no custom VPC, no private subnets, no NAT gateway. Security groups allow inbound access from any source to SSH (22) on all nodes, the API server (6443) on control-plane nodes, and the NodePort range (30000-32767) on worker nodes, which is convenient for a lab but far more permissive than you'd want in production.
 
 ## 🤝 Contributing
 
